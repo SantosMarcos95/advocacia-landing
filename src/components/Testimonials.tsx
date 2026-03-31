@@ -3,16 +3,20 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import TestimonialForm from './TestimonialForm'
 
+const PAGE_SIZE = 8
+
 interface Testimonial {
   id: string
   text: string
   authorName: string
   authorPhoto: string | null
   context: string
+  createdAt: { seconds: number } | null
 }
 
 export default function Testimonials() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const [showAll, setShowAll] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -22,7 +26,10 @@ export default function Testimonials() {
       where('status', '==', 'approved')
     )
     const unsub = onSnapshot(q, snap => {
-      setTestimonials(snap.docs.map(d => ({ id: d.id, ...d.data() } as Testimonial)))
+      const sorted = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Testimonial))
+        .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+      setTestimonials(sorted)
       setLoading(false)
     }, err => {
       console.error('Firestore error:', err)
@@ -30,6 +37,9 @@ export default function Testimonials() {
     })
     return unsub
   }, [])
+
+  const visible = showAll ? testimonials : testimonials.slice(0, PAGE_SIZE)
+  const hasMore = testimonials.length > PAGE_SIZE
 
   return (
     <section
@@ -79,7 +89,7 @@ export default function Testimonials() {
         {/* Testimonial cards */}
         {!loading && testimonials.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {testimonials.map((t) => (
+            {visible.map((t) => (
               <div key={t.id} className="relative flex flex-col">
                 {/* Outer decorative frame */}
                 <div className="absolute inset-0 border border-gold/10 rounded-sm translate-x-1.5 translate-y-1.5" />
@@ -124,6 +134,25 @@ export default function Testimonials() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Ver mais */}
+        {!loading && hasMore && (
+          <div className="mt-10 text-center">
+            <button
+              onClick={() => setShowAll(v => !v)}
+              className="inline-flex items-center gap-2 px-6 py-3 border border-white/20 text-white/60 font-light text-sm tracking-wide hover:border-gold hover:text-gold transition-all duration-300 rounded-sm"
+            >
+              {showAll ? 'Ver menos' : `Ver mais (${testimonials.length - PAGE_SIZE} restantes)`}
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2"
+                className={`transition-transform duration-300 ${showAll ? 'rotate-180' : ''}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
           </div>
         )}
 
