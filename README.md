@@ -2,6 +2,8 @@
 
 Site institucional da Dra. Hemilly Fátima Guilherme, advogada inscrita na OAB/SC 70.150, especialista em Direito Trabalhista, do Consumidor, Cível, Empresarial e Consultoria Jurídica.
 
+**Site no ar:** [advocacia-landing-xi.vercel.app](https://advocacia-landing-xi.vercel.app/)
+
 ---
 
 ## Tecnologias
