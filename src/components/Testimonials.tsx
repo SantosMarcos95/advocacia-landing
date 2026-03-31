@@ -159,7 +159,7 @@ export default function Testimonials() {
         {/* CTA */}
         <div className="mt-14 text-center flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
-            href="https://wa.me/5548984695233?text=Olá, gostaria de agendar uma consulta."
+            href="https://wa.me/5548998499131?text=Olá, gostaria de agendar uma consulta."
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 px-8 py-4 bg-gold text-dark font-semibold text-sm tracking-wide hover:bg-gold-light transition-all duration-300 rounded-sm shadow-lg shadow-gold/20"

@@ -8,7 +8,7 @@ export default function Hero() {
 
   const openWhatsApp = () => {
     window.open(
-      "https://wa.me/5548984695233?text=Olá, gostaria de agendar uma consulta.",
+      "https://wa.me/5548998499131?text=Olá, gostaria de agendar uma consulta.",
       "_blank"
     );
   };

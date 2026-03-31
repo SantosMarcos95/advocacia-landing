@@ -102,7 +102,7 @@
 
 | Canal | Handle / Contato |
 |---|---|
-| WhatsApp | (48) 98469-5233 → `https://wa.me/5548984695233` |
+| WhatsApp | (48) 98849-9131 → `https://wa.me/5548998499131` |
 | Instagram | @hemillyfatimaadv → `https://instagram.com/hemillyfatimaadv` |
 | LinkedIn | /in/hemilly-fátima-033824282 |
 | E-mail | hemillyfatimaadv@gmail.com |

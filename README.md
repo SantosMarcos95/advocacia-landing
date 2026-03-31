@@ -48,7 +48,7 @@ npm run preview
 
 ## Contato profissional
 
-- **WhatsApp:** (48) 98469-5233
+- **WhatsApp:** (48) 98849-9131
 - **E-mail:** hemillyfatimaadv@gmail.com
 - **LinkedIn:** [Hemilly Fátima](https://linkedin.com/in/hemilly-fátima-033824282)
 - **OAB/SC:** 70.150
