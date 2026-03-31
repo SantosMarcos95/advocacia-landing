@@ -2,10 +2,10 @@ const contacts = [
   {
     id: 'whatsapp',
     label: 'WhatsApp',
-    handle: '(48) 9849-9131',
+    handle: '(48) 99849-9131',
     description: 'Atendimento rápido e agendamento de consultas',
     cta: 'Enviar mensagem',
-    href: 'https://wa.me/55489849-9131?text=Olá, gostaria de agendar uma consulta.',
+    href: 'https://wa.me/554899849-9131?text=Olá, gostaria de agendar uma consulta.',
     colors: {
       bg: 'hover:bg-[#25D366]/10',
       border: 'hover:border-[#25D366]/50',
