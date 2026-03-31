@@ -57,9 +57,10 @@ export default function Hero() {
 
             {/* Tagline */}
             <p className="text-white/60 text-lg font-light leading-relaxed max-w-md">
-              Compromisso, ética e excelência na defesa dos seus direitos.
-              Atendimento personalizado e humanizado em todas as etapas do seu
-              processo.
+              Você não deveria enfrentar questões jurídicas sozinho. Defesa
+              especializada em Direito Trabalhista, do Consumidor, Cível e
+              Empresarial — com atendimento humanizado e estratégico em todo o
+              Brasil.
             </p>
 
             {/* CTA Buttons */}

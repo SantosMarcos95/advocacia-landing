@@ -7,7 +7,7 @@ const areas = [
     title: 'Direito Trabalhista',
     subtitle: 'e Processo do Trabalho',
     description:
-      'Especialização em Direito e Processo do Trabalho, com atuação em reclamações trabalhistas, audiências e sustentações orais. Defesa dos seus direitos nas relações de trabalho.',
+      'Foi demitido sem justa causa, não recebeu suas verbas rescisórias ou está sofrendo assédio no trabalho? Atuo em reclamações trabalhistas, audiências e sustentações orais para garantir que você receba o que é seu por direito.',
     topics: ['Reclamação trabalhista', 'Rescisão indevida', 'Horas extras e Cáulculo de verbas rescisórias', 'Assédio moral e sexual'],
   },
   {
@@ -15,7 +15,7 @@ const areas = [
     title: 'Direito do Consumidor',
     subtitle: 'e Relações de Consumo',
     description:
-      'Experiência em demandas consumeristas e atuação conciliatória. Proteção dos seus direitos frente a fornecedores, empresas e prestadores de serviço.',
+      'Cobrado por algo que não contratou? Produto com defeito e a empresa não resolve? Você tem direitos garantidos por lei — e estou aqui para fazê-los valer com eficiência e sem burocracia.',
     topics: ['Cobranças indevidas', 'Vícios em produtos e serviços', 'Negativação indevida', 'Conciliação e mediação'],
   },
   {
@@ -23,7 +23,7 @@ const areas = [
     title: 'Direito Cível',
     subtitle: 'Ações Individuais e Coletivas',
     description:
-      'Atuação estratégica em ações cíveis individuais e coletivas, com elaboração de peças processuais de alta complexidade e análise de jurisprudência.',
+      'Sofreu um dano, foi lesado por alguém ou precisa cobrar uma dívida na justiça? Atuo em ações cíveis com análise estratégica e peças processuais de alta complexidade.',
     topics: ['Ações indenizatórias', 'Responsabilidade civil', 'Contratos e obrigações', 'Recursos e execuções'],
   },
   {
@@ -31,7 +31,7 @@ const areas = [
     title: 'Direito Empresarial',
     subtitle: 'e Assessoria Corporativa',
     description:
-      'Assessoria jurídica completa para empresas e empreendedores, desde a constituição societária até a resolução de conflitos empresariais, com foco em segurança e crescimento do negócio.',
+      'Do nascimento ao crescimento da sua empresa, ofereço assessoria jurídica completa para proteger seu negócio de riscos e conflitos antes que virem litígios custosos.',
     topics: ['Constituição e dissolução de empresas', 'Contratos empresariais', 'Recuperação de crédito', 'Conflitos societários'],
   },
   {
@@ -39,7 +39,7 @@ const areas = [
     title: 'Consultoria Jurídica',
     subtitle: 'e Assessoria Preventiva',
     description:
-      'Atendimento jurídico personalizado e consultivo para prevenir litígios e orientar decisões com segurança. Foco na defesa dos seus interesses e na obtenção de resultados eficientes.',
+      'Prefere prevenir do que remediar? A consultoria jurídica preventiva identifica riscos antes que virem problemas, economizando tempo e dinheiro. Decisões mais seguras começam com uma boa orientação.',
     topics: ['Análise de contratos', 'Estratégia processual', 'Orientação e assessoria', 'Prevenção de litígios'],
   },
 ]

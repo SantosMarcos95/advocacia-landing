@@ -80,22 +80,24 @@ export default function About() {
 
             <div className="flex flex-col gap-4 text-white/60 font-light leading-relaxed">
               <p>
+                Quando você enfrenta um problema jurídico, precisa de alguém
+                que entenda a sua situação antes de montar qualquer estratégia.
                 Sou a Dra. Hemilly Fátima Guilherme, advogada formada pela
-                Universidade do Vale do Itajaí (UNIVALI) e pós-graduada em
-                Direito e Processo do Trabalho. Atuo de forma consultiva e
-                contenciosa, com comprometimento, ética e técnica em cada
-                demanda.
+                UNIVALI e pós-graduada em Direito e Processo do Trabalho, com
+                atuação consultiva e contenciosa.
               </p>
               <p>
-                Tenho experiência na elaboração de peças processuais,
-                participação em audiências, sustentações orais e atendimento
-                jurídico personalizado. Meu perfil proativo me permite analisar
-                estrategicamente cada processo, negociar e resolver conflitos
-                aliando conhecimento técnico à prática forense.
+                Elaboro peças processuais, participo de audiências e
+                sustentações orais, e ofereço orientação jurídica clara em cada
+                etapa. Minha atuação é estratégica: analiso cada caso em
+                profundidade, identifico as melhores alternativas e trabalho
+                para que você tome decisões com segurança e sem surpresas.
               </p>
               <p>
-                Atendendo em todo o Brasil, com foco na defesa dos interesses dos
-                clientes e na prevenção de litígios.
+                Atendo em todo o Brasil — presencialmente na Grande
+                Florianópolis ou de forma online — com foco na defesa dos seus
+                interesses e na prevenção de problemas antes que virem
+                processos.
               </p>
             </div>
 
