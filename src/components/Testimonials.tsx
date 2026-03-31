@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import TestimonialForm from './TestimonialForm'
 
@@ -19,11 +19,13 @@ export default function Testimonials() {
   useEffect(() => {
     const q = query(
       collection(db, 'testimonials'),
-      where('status', '==', 'approved'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'approved')
     )
     const unsub = onSnapshot(q, snap => {
       setTestimonials(snap.docs.map(d => ({ id: d.id, ...d.data() } as Testimonial)))
+      setLoading(false)
+    }, err => {
+      console.error('Firestore error:', err)
       setLoading(false)
     })
     return unsub
