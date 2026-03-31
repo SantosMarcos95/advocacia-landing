@@ -111,7 +111,7 @@ export default function Hero() {
                 <img
                   src={fotoPerfil}
                   alt="Dra. Hemilly Fátima Guilherme — Advogada em Florianópolis SC, OAB/SC 70.150"
-                  className="w-full h-full object-cover object-top"
+                  className="w-full h-full object-cover object-[center_20%]"
                 />
               </div>
 
