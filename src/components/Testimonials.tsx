@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import TestimonialForm from './TestimonialForm'
 
-const PAGE_SIZE = 8
+const PAGE_SIZE = 6
 
 interface Testimonial {
   id: string
