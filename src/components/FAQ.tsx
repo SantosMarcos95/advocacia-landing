@@ -275,7 +275,7 @@ export default function FAQ() {
             Não encontrou a resposta que procurava?
           </p>
           <a
-            href="https://wa.me/5548998499131?text=Olá, tenho uma dúvida jurídica e gostaria de conversar."
+            href="https://wa.me/5548984991310?text=Olá, tenho uma dúvida jurídica e gostaria de conversar."
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 px-8 py-4 bg-gold text-dark font-semibold text-sm tracking-wide hover:bg-gold-light transition-all duration-300 rounded-sm shadow-lg shadow-gold/20"
