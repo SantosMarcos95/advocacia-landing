@@ -5,6 +5,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
 } from 'firebase/firestore'
@@ -77,6 +78,11 @@ export default function Admin() {
 
   const setStatus = async (id: string, status: 'approved' | 'rejected') => {
     await updateDoc(doc(db, 'testimonials', id), { status })
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Excluir este depoimento permanentemente?')) return
+    await deleteDoc(doc(db, 'testimonials', id))
   }
 
   const filtered = filter === 'all'
@@ -280,6 +286,14 @@ export default function Admin() {
                     className="px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium rounded-sm hover:bg-red-500/20 transition-colors"
                   >
                     Rejeitar
+                  </button>
+                )}
+                {t.status === 'rejected' && (
+                  <button
+                    onClick={() => handleDelete(t.id)}
+                    className="px-4 py-2 bg-white/5 border border-white/10 text-white/40 text-xs font-medium rounded-sm hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 transition-colors"
+                  >
+                    Excluir
                   </button>
                 )}
               </div>
