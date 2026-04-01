@@ -8,7 +8,7 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore'
-import { auth, db, googleProvider, ADMIN_EMAIL } from '../lib/firebase'
+import { auth, db, googleProvider, microsoftProvider, ADMIN_EMAIL } from '../lib/firebase'
 import type { User } from 'firebase/auth'
 
 interface Testimonial {
@@ -61,10 +61,10 @@ export default function Admin() {
 
   const [loginError, setLoginError] = useState('')
 
-  const handleLogin = async () => {
+  const handleLogin = async (provider: 'google' | 'microsoft') => {
     setLoginError('')
     try {
-      await signInWithPopup(auth, googleProvider)
+      await signInWithPopup(auth, provider === 'google' ? googleProvider : microsoftProvider)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setLoginError(`Erro: ${msg}`)
@@ -110,13 +110,22 @@ export default function Admin() {
           <p className="text-white/50 text-sm font-light mb-8">
             Entre com a conta autorizada para gerenciar os depoimentos.
           </p>
-          <button
-            onClick={handleLogin}
-            className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 font-medium text-sm rounded-sm hover:bg-gray-100 transition-colors"
-          >
-            <GoogleIcon />
-            Entrar com Google
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => handleLogin('google')}
+              className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 font-medium text-sm rounded-sm hover:bg-gray-100 transition-colors"
+            >
+              <GoogleIcon />
+              Entrar com Google
+            </button>
+            <button
+              onClick={() => handleLogin('microsoft')}
+              className="flex items-center gap-3 mx-auto px-6 py-3 bg-[#2F2F2F] text-white font-medium text-sm rounded-sm hover:bg-[#1a1a1a] transition-colors border border-white/10"
+            >
+              <MicrosoftIcon />
+              Entrar com Microsoft
+            </button>
+          </div>
           {loginError && (
             <p className="text-red-400 text-xs mt-4 max-w-xs mx-auto break-words">{loginError}</p>
           )}
@@ -279,6 +288,17 @@ export default function Admin() {
         )}
       </div>
     </div>
+  )
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+      <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+      <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+      <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+    </svg>
   )
 }
 

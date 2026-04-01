@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signInWithPopup, signOut } from 'firebase/auth'
+import { signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { X } from 'lucide-react'
 import { auth, db, googleProvider } from '../lib/firebase'
@@ -25,8 +25,11 @@ export default function TestimonialForm({ onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  const [emailMode, setEmailMode] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
     setError('')
     setLoading(true)
     try {
@@ -36,6 +39,36 @@ export default function TestimonialForm({ onClose }: Props) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(`Erro: ${msg}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      let result
+      try {
+        result = await signInWithEmailAndPassword(auth, emailInput, passwordInput)
+      } catch {
+        result = await createUserWithEmailAndPassword(auth, emailInput, passwordInput)
+      }
+      setUser(result.user)
+      setDisplayName(result.user.displayName ?? '')
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string }
+      if (firebaseError.code === 'auth/wrong-password' || firebaseError.code === 'auth/invalid-credential') {
+        setError('Senha incorreta. Tente novamente.')
+      } else if (firebaseError.code === 'auth/weak-password') {
+        setError('Senha muito curta. Use ao menos 6 caracteres.')
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        setError('E-mail inválido.')
+      } else {
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(`Erro: ${msg}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -128,20 +161,78 @@ export default function TestimonialForm({ onClose }: Props) {
           </div>
         ) : !user ? (
           /* Login state */
-          <div className="text-center py-4">
-            <p className="text-white/60 text-sm font-light mb-6">
-              Entre com sua conta Google para deixar um depoimento.
+          <div className="py-4">
+            <p className="text-white/60 text-sm font-light mb-6 text-center">
+              Entre com sua conta para deixar um depoimento.
             </p>
-            <button
-              onClick={handleLogin}
-              disabled={loading}
-              className="flex items-center gap-3 mx-auto px-6 py-3 bg-white text-gray-800 font-medium text-sm rounded-sm hover:bg-gray-100 transition-colors disabled:opacity-50"
-            >
-              <GoogleIcon />
-              {loading ? 'Entrando...' : 'Entrar com Google'}
-            </button>
+
+            {!emailMode ? (
+              <div className="flex flex-col gap-3 items-center">
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                  className="flex items-center gap-3 px-6 py-3 bg-white text-gray-800 font-medium text-sm rounded-sm hover:bg-gray-100 transition-colors disabled:opacity-50 w-full justify-center"
+                >
+                  <GoogleIcon />
+                  {loading ? 'Entrando...' : 'Entrar com Google'}
+                </button>
+
+                <div className="flex items-center gap-3 w-full my-1">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-white/30 text-xs">ou</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+
+                <button
+                  onClick={() => setEmailMode(true)}
+                  disabled={loading}
+                  className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 text-white font-medium text-sm rounded-sm hover:bg-white/10 transition-colors disabled:opacity-50 w-full justify-center"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  Entrar com e-mail
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleEmailLogin} className="flex flex-col gap-3">
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  placeholder="Seu e-mail"
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-sm px-4 py-3 text-white text-sm font-light placeholder:text-white/30 focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={e => setPasswordInput(e.target.value)}
+                  placeholder="Senha (mín. 6 caracteres)"
+                  required
+                  minLength={6}
+                  className="w-full bg-white/5 border border-white/10 rounded-sm px-4 py-3 text-white text-sm font-light placeholder:text-white/30 focus:outline-none focus:border-gold/50 transition-colors"
+                />
+                <p className="text-white/30 text-xs text-center -mt-1">
+                  Se for a primeira vez, uma conta será criada automaticamente.
+                </p>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 bg-gold text-dark font-semibold text-sm rounded-sm hover:bg-gold-light transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Entrando...' : 'Continuar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEmailMode(false); setError('') }}
+                  className="text-white/30 hover:text-white/60 text-xs text-center transition-colors"
+                >
+                  Voltar
+                </button>
+              </form>
+            )}
+
             {error && (
-              <p className="text-red-400 text-xs mt-4">{error}</p>
+              <p className="text-red-400 text-xs mt-4 text-center">{error}</p>
             )}
           </div>
         ) : (
