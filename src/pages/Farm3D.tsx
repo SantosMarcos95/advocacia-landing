@@ -44,6 +44,7 @@ interface Order {
   productName: string; quantity: number; unitPrice: number
   status: 'aguardando'|'imprimindo'|'pronto'|'entregue'|'cancelado'
   paid: boolean; orderDate: string; dueDate: string; notes: string
+  stockItemId?: string
 }
 interface MonthlyGoal { month: string; target: number }
 interface StockItem {
@@ -304,21 +305,13 @@ export default function Farm3D() {
     const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate, stockItemId:prodForm.stockItemId||undefined }
     setProducts((p) => editProdId ? p.map((x) => x.id===editProdId ? prod : x) : [...p, prod])
     await setDoc(doc(db, COL.products, prod.id), prod)
-    // Ao registrar uma nova venda, cria pedido automaticamente
+    // Ao registrar uma nova venda, cria pedido automaticamente como "Pronto"
+    // O estoque só é decrementado quando o pedido for marcado como Entregue
     if (!editProdId) {
       const qty = toNum(prodForm.quantity)
-      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'entregue', paid:true, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'' }
+      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'pronto', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
       setOrders((p) => [o, ...p])
       await setDoc(doc(db, COL.orders, o.id), o)
-      // Decrementa estoque se veio do catálogo
-      if (prodForm.stockItemId) {
-        const si = stockItems.find((s) => s.id === prodForm.stockItemId)
-        if (si) {
-          const updated = { ...si, stockQty: Math.max(0, si.stockQty - qty) }
-          setStockItems((p) => p.map((s) => s.id === si.id ? updated : s))
-          await setDoc(doc(db, COL.stock, si.id), updated)
-        }
-      }
     }
     setShowProdForm(false); setEditProdId(null)
   }
@@ -380,10 +373,20 @@ export default function Farm3D() {
     setShowOrderForm(false); setEditOrderId(null)
   }
   async function updateOrder(id: string, patch: Partial<Order>) {
+    const prev = orders.find((o) => o.id === id)
     const updated = orders.map((o) => o.id===id ? { ...o, ...patch } : o)
     setOrders(updated)
     const o = updated.find((x) => x.id===id)!
     await setDoc(doc(db, COL.orders, id), o)
+    // Decrementa estoque quando pedido é marcado como Entregue
+    if (patch.status === 'entregue' && prev?.status !== 'entregue' && o.stockItemId) {
+      const si = stockItems.find((s) => s.id === o.stockItemId)
+      if (si) {
+        const siUpdated = { ...si, stockQty: Math.max(0, si.stockQty - o.quantity) }
+        setStockItems((p) => p.map((s) => s.id === si.id ? siUpdated : s))
+        await setDoc(doc(db, COL.stock, si.id), siUpdated)
+      }
+    }
   }
   async function deleteOrder(id: string) {
     setOrders((p) => p.filter((x) => x.id !== id))
@@ -1079,10 +1082,10 @@ export default function Farm3D() {
                   <div><label className="block text-white/40 text-xs mb-1.5">Filamento</label><select value={prodForm.filamentId} onChange={(e) => setProdForm((p) => ({ ...p, filamentId:e.target.value }))} className={selectCls}><option value="">Selecione...</option>{filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}</select></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Quantidade</label><input type="number" min="1" value={prodForm.quantity} onChange={(e) => setProdForm((p) => ({ ...p, quantity:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Data da Venda</label><input type="date" value={prodForm.saleDate} onChange={(e) => setProdForm((p) => ({ ...p, saleDate:e.target.value }))} className={inputCls} /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Peso por peça (g)</label><input type="number" step="0.1" min="0" placeholder="5" value={prodForm.weightPerPieceG} onChange={(e) => setProdForm((p) => ({ ...p, weightPerPieceG:e.target.value }))} className={inputCls} /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Tempo por peça (h)</label><input type="number" step="0.5" min="0" placeholder="1" value={prodForm.printTimeH} onChange={(e) => setProdForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label><input type="number" min="5" max="100" step="5" value={prodForm.infillPct} onChange={(e) => setProdForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label><input type="number" step="0.5" min="0" value={prodForm.purgeWasteG} onChange={(e) => setProdForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Peso por peça (g)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.weightPerPieceG || '—'}g</p> : <input type="number" step="0.1" min="0" placeholder="5" value={prodForm.weightPerPieceG} onChange={(e) => setProdForm((p) => ({ ...p, weightPerPieceG:e.target.value }))} className={inputCls} />}</div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Tempo por peça (h)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.printTimeH || '—'}h</p> : <input type="number" step="0.5" min="0" placeholder="1" value={prodForm.printTimeH} onChange={(e) => setProdForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} />}</div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.infillPct || '—'}%</p> : <input type="number" min="5" max="100" step="5" value={prodForm.infillPct} onChange={(e) => setProdForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} />}</div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.purgeWasteG || '0'}g</p> : <input type="number" step="0.5" min="0" value={prodForm.purgeWasteG} onChange={(e) => setProdForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} />}</div>
                   <div className="col-span-2 sm:col-span-1">
                     <label className="block text-white/40 text-xs mb-1.5">Total recebido (R$)</label>
                     <input type="number" step="0.01" min="0" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value }))} className={inputCls} />
