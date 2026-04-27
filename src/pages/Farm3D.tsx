@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Edit2, Check, X, Settings, Layers, ArrowLeft,
   LayoutDashboard, Package, Wrench, AlertTriangle, ShoppingCart,
   Target, Clock, XCircle, Thermometer, ChevronRight,
-  DollarSign, Percent, TrendingUp, LogOut, Loader,
+  DollarSign, Percent, TrendingUp, LogOut, Loader, Archive, Minus,
 } from 'lucide-react'
 import {
   collection, doc, setDoc, deleteDoc, getDocs, getDoc,
@@ -27,6 +27,7 @@ interface Product {
   id: string; name: string; quantity: number; filamentId: string
   weightPerPieceG: number; infillPct: number; purgeWasteG: number
   printTimeH: number; realSellingPrice: number; saleDate: string
+  stockItemId?: string
 }
 interface MaintenanceTask {
   id: string; name: string; description: string
@@ -45,6 +46,11 @@ interface Order {
   paid: boolean; orderDate: string; dueDate: string; notes: string
 }
 interface MonthlyGoal { month: string; target: number }
+interface StockItem {
+  id: string; name: string; filamentId: string
+  weightPerPieceG: number; infillPct: number; purgeWasteG: number
+  printTimeH: number; stockQty: number
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -102,6 +108,7 @@ const COL = {
   filaments: 'farm3d_filaments', products: 'farm3d_products',
   tasks: 'farm3d_tasks', fails: 'farm3d_fails',
   orders: 'farm3d_orders', goals: 'farm3d_goals',
+  stock: 'farm3d_stock',
 }
 const CFG_DOC = () => doc(db, 'farm3d_config', 'main')
 
@@ -147,7 +154,7 @@ function getMonthRevenue(month: string, products: Product[]) {
 const inputCls = 'w-full bg-dark border border-gold/20 rounded px-3 py-2 text-white text-sm focus:border-gold/50 outline-none transition-colors'
 const selectCls = 'w-full bg-dark border border-gold/20 rounded px-3 py-2 text-white text-sm focus:border-gold/50 outline-none transition-colors'
 
-type Tab = 'painel'|'pedidos'|'manutencao'|'filamentos'|'produtos'|'config'
+type Tab = 'painel'|'pedidos'|'manutencao'|'filamentos'|'vendas'|'estoque'|'config'
 
 function Card({ label, value, sub, color='text-white' }: { label:string; value:string; sub?:string; color?:string }) {
   return (
@@ -161,7 +168,8 @@ function Card({ label, value, sub, color='text-white' }: { label:string; value:s
 
 // ─── Empty forms ──────────────────────────────────────────────────────────────
 const EMPTY_FIL = { name:'', color:'#f97316', pricePerKg:'', stockG:'', material:'PLA', nozzleTempC:'210', bedTempC:'60' }
-const EMPTY_PROD = { name:'', quantity:'1', filamentId:'', weightPerPieceG:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', realSellingPrice:'', saleDate:today() }
+const EMPTY_PROD = { name:'', quantity:'1', filamentId:'', weightPerPieceG:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', realSellingPrice:'', saleDate:today(), stockItemId:'' }
+const EMPTY_STOCK = { name:'', filamentId:'', weightPerPieceG:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', stockQty:'0' }
 const EMPTY_FAIL = { date:today(), description:'', filamentId:'', wastedG:'', wastedTimeH:'', reason:'outro', notes:'' }
 const EMPTY_ORDER = { clientName:'', clientContact:'', productName:'', quantity:'1', unitPrice:'', orderDate:today(), dueDate:'', notes:'' }
 
@@ -182,6 +190,7 @@ export default function Farm3D() {
   const [fails, setFails] = useState<FailedPrint[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [goals, setGoals] = useState<MonthlyGoal[]>([])
+  const [stockItems, setStockItems] = useState<StockItem[]>([])
 
   // Forms
   const [showFilForm, setShowFilForm] = useState(false)
@@ -198,6 +207,9 @@ export default function Farm3D() {
   const [editOrderId, setEditOrderId] = useState<string|null>(null)
   const [orderForm, setOrderForm] = useState(EMPTY_ORDER)
   const [goalInput, setGoalInput] = useState('')
+  const [showStockForm, setShowStockForm] = useState(false)
+  const [editStockId, setEditStockId] = useState<string|null>(null)
+  const [stockForm, setStockForm] = useState(EMPTY_STOCK)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -219,7 +231,7 @@ export default function Farm3D() {
   async function loadData() {
     setDataLoading(true)
     try {
-      const [filSnap, prodSnap, taskSnap, failSnap, orderSnap, cfgSnap, goalSnap] = await Promise.all([
+      const [filSnap, prodSnap, taskSnap, failSnap, orderSnap, cfgSnap, goalSnap, stockSnap] = await Promise.all([
         getDocs(collection(db, COL.filaments)),
         getDocs(collection(db, COL.products)),
         getDocs(collection(db, COL.tasks)),
@@ -227,12 +239,14 @@ export default function Farm3D() {
         getDocs(collection(db, COL.orders)),
         getDoc(CFG_DOC()),
         getDocs(collection(db, COL.goals)),
+        getDocs(collection(db, COL.stock)),
       ])
       setFilaments(filSnap.docs.map((d) => d.data() as Filament))
       setProducts(prodSnap.docs.map((d) => d.data() as Product))
       setFails(failSnap.docs.map((d) => d.data() as FailedPrint).sort((a,b) => b.date.localeCompare(a.date)))
       setOrders(orderSnap.docs.map((d) => d.data() as Order).sort((a,b) => b.orderDate.localeCompare(a.orderDate)))
       setGoals(goalSnap.docs.map((d) => d.data() as MonthlyGoal))
+      setStockItems(stockSnap.docs.map((d) => d.data() as StockItem))
 
       if (taskSnap.empty) {
         const defaultTasks = DEFAULT_TASKS.map((t) => ({ ...t, id: uid() }))
@@ -282,14 +296,30 @@ export default function Farm3D() {
   // ── Products ──────────────────────────────────────────────────────────────
   function openAddProd() { setProdForm({ ...EMPTY_PROD, saleDate:today() }); setEditProdId(null); setShowProdForm(true) }
   function openEditProd(p: Product) {
-    setProdForm({ name:p.name, quantity:String(p.quantity), filamentId:p.filamentId, weightPerPieceG:String(p.weightPerPieceG), infillPct:String(p.infillPct||15), purgeWasteG:String(p.purgeWasteG||0), printTimeH:String(p.printTimeH), realSellingPrice:String(p.realSellingPrice), saleDate:p.saleDate||today() })
+    setProdForm({ name:p.name, quantity:String(p.quantity), filamentId:p.filamentId, weightPerPieceG:String(p.weightPerPieceG), infillPct:String(p.infillPct||15), purgeWasteG:String(p.purgeWasteG||0), printTimeH:String(p.printTimeH), realSellingPrice:String(p.realSellingPrice), saleDate:p.saleDate||today(), stockItemId:p.stockItemId||'' })
     setEditProdId(p.id); setShowProdForm(true)
   }
   async function saveProd() {
     if (!prodForm.name.trim() || !prodForm.filamentId || toNum(prodForm.quantity) <= 0) return
-    const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate }
+    const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate, stockItemId:prodForm.stockItemId||undefined }
     setProducts((p) => editProdId ? p.map((x) => x.id===editProdId ? prod : x) : [...p, prod])
     await setDoc(doc(db, COL.products, prod.id), prod)
+    // Ao registrar uma nova venda, cria pedido automaticamente
+    if (!editProdId) {
+      const qty = toNum(prodForm.quantity)
+      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'entregue', paid:true, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'' }
+      setOrders((p) => [o, ...p])
+      await setDoc(doc(db, COL.orders, o.id), o)
+      // Decrementa estoque se veio do catálogo
+      if (prodForm.stockItemId) {
+        const si = stockItems.find((s) => s.id === prodForm.stockItemId)
+        if (si) {
+          const updated = { ...si, stockQty: Math.max(0, si.stockQty - qty) }
+          setStockItems((p) => p.map((s) => s.id === si.id ? updated : s))
+          await setDoc(doc(db, COL.stock, si.id), updated)
+        }
+      }
+    }
     setShowProdForm(false); setEditProdId(null)
   }
   async function deleteProd(id: string) {
@@ -358,6 +388,31 @@ export default function Farm3D() {
   async function deleteOrder(id: string) {
     setOrders((p) => p.filter((x) => x.id !== id))
     await deleteDoc(doc(db, COL.orders, id))
+  }
+
+  // ── Stock ─────────────────────────────────────────────────────────────────
+  function openAddStock() { setStockForm(EMPTY_STOCK); setEditStockId(null); setShowStockForm(true) }
+  function openEditStock(s: StockItem) {
+    setStockForm({ name:s.name, filamentId:s.filamentId, weightPerPieceG:String(s.weightPerPieceG), infillPct:String(s.infillPct||15), purgeWasteG:String(s.purgeWasteG||0), printTimeH:String(s.printTimeH), stockQty:String(s.stockQty||0) })
+    setEditStockId(s.id); setShowStockForm(true)
+  }
+  async function saveStock() {
+    if (!stockForm.name.trim() || !stockForm.filamentId) return
+    const s: StockItem = { id:editStockId||uid(), name:stockForm.name.trim(), filamentId:stockForm.filamentId, weightPerPieceG:toNum(stockForm.weightPerPieceG), infillPct:toNum(stockForm.infillPct), purgeWasteG:toNum(stockForm.purgeWasteG), printTimeH:toNum(stockForm.printTimeH), stockQty:toNum(stockForm.stockQty) }
+    setStockItems((p) => editStockId ? p.map((x) => x.id===editStockId ? s : x) : [...p, s])
+    await setDoc(doc(db, COL.stock, s.id), s)
+    setShowStockForm(false); setEditStockId(null)
+  }
+  async function deleteStock(id: string) {
+    setStockItems((p) => p.filter((x) => x.id !== id))
+    await deleteDoc(doc(db, COL.stock, id))
+  }
+  async function addStockQty(id: string, delta: number) {
+    const si = stockItems.find((s) => s.id === id)
+    if (!si) return
+    const updated = { ...si, stockQty: Math.max(0, si.stockQty + delta) }
+    setStockItems((p) => p.map((s) => s.id === id ? updated : s))
+    await setDoc(doc(db, COL.stock, id), updated)
   }
 
   // ── Goals ─────────────────────────────────────────────────────────────────
@@ -479,9 +534,10 @@ export default function Farm3D() {
           {([
             ['painel', LayoutDashboard, 'Painel'],
             ['pedidos', ShoppingCart, 'Pedidos'],
+            ['vendas', Package, 'Vendas'],
+            ['estoque', Archive, 'Estoque'],
             ['manutencao', Wrench, 'Manutenção'],
             ['filamentos', Layers, 'Filamentos'],
-            ['produtos', Package, 'Produtos'],
             ['config', Settings, 'Config'],
           ] as [Tab, typeof Settings, string][]).map(([t, Icon, label]) => (
             <button key={t} onClick={() => setTab(t)}
@@ -982,17 +1038,42 @@ export default function Farm3D() {
           </div>
         )}
 
-        {/* ══ PRODUTOS ══ */}
-        {tab==='produtos' && (
+        {/* ══ VENDAS ══ */}
+        {tab==='vendas' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <div><h2 className="text-gold font-serif text-lg">Produtos / Vendas</h2><p className="text-white/40 text-sm mt-0.5">{products.length} vendas registradas</p></div>
+              <div><h2 className="text-gold font-serif text-lg">Vendas</h2><p className="text-white/40 text-sm mt-0.5">{products.length} vendas registradas</p></div>
               {!showProdForm && <button onClick={openAddProd} className="flex items-center gap-2 px-4 py-2 border border-gold text-gold text-sm hover:bg-gold hover:text-dark transition-all rounded"><Plus size={14} /> Registrar Venda</button>}
             </div>
 
             {showProdForm && (
               <div className="mb-8 bg-dark-200 border border-gold/20 rounded-lg p-5">
-                <h3 className="text-white/60 text-xs uppercase tracking-wider mb-4">{editProdId?'Editar':'Nova Venda'}</h3>
+                <h3 className="text-white/60 text-xs uppercase tracking-wider mb-4">{editProdId?'Editar Venda':'Nova Venda'}</h3>
+                {/* Seletor do estoque */}
+                {stockItems.length > 0 && !editProdId && (
+                  <div className="mb-4 p-3 bg-dark-300/50 border border-gold/10 rounded-lg">
+                    <label className="block text-white/40 text-xs mb-1.5">Selecionar do Estoque (preenche campos automaticamente)</label>
+                    <select
+                      value={prodForm.stockItemId}
+                      onChange={(e) => {
+                        const si = stockItems.find((s) => s.id === e.target.value)
+                        if (si) {
+                          setProdForm((p) => ({ ...p, stockItemId:e.target.value, name:si.name, filamentId:si.filamentId, weightPerPieceG:String(si.weightPerPieceG), infillPct:String(si.infillPct), purgeWasteG:String(si.purgeWasteG), printTimeH:String(si.printTimeH) }))
+                        } else {
+                          setProdForm((p) => ({ ...p, stockItemId:'' }))
+                        }
+                      }}
+                      className={selectCls}
+                    >
+                      <option value="">— Preencher manualmente —</option>
+                      {stockItems.map((s) => {
+                        const fil = filaments.find((f) => f.id === s.filamentId)
+                        const calc = calcProduct({ id:'', name:'', quantity:1, filamentId:s.filamentId, weightPerPieceG:s.weightPerPieceG, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
+                        return <option key={s.id} value={s.id}>{s.name}{fil?` (${fil.name})`:''} — Sugerido: {fmt(calc.suggestedPrice)} — Estoque: {s.stockQty} un.</option>
+                      })}
+                    </select>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Nome do Produto</label><input type="text" placeholder="Chaveiro" value={prodForm.name} onChange={(e) => setProdForm((p) => ({ ...p, name:e.target.value }))} className={inputCls} autoFocus /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Filamento</label><select value={prodForm.filamentId} onChange={(e) => setProdForm((p) => ({ ...p, filamentId:e.target.value }))} className={selectCls}><option value="">Selecione...</option>{filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}</select></div>
@@ -1002,7 +1083,11 @@ export default function Farm3D() {
                   <div><label className="block text-white/40 text-xs mb-1.5">Tempo por peça (h)</label><input type="number" step="0.5" min="0" placeholder="1" value={prodForm.printTimeH} onChange={(e) => setProdForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label><input type="number" min="5" max="100" step="5" value={prodForm.infillPct} onChange={(e) => setProdForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label><input type="number" step="0.5" min="0" value={prodForm.purgeWasteG} onChange={(e) => setProdForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} /></div>
-                  <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Total recebido (R$)</label><input type="number" step="0.01" min="0" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value }))} className={inputCls} /></div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-white/40 text-xs mb-1.5">Total recebido (R$)</label>
+                    <input type="number" step="0.01" min="0" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value }))} className={inputCls} />
+                    {previewCalc && <p className="text-yellow-400/80 text-xs mt-1">Sugerido: {fmt(previewCalc.suggestedPrice)}</p>}
+                  </div>
                 </div>
                 {previewCalc && (
                   <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-dark-300/60 rounded-lg p-4 border border-gold/10">
@@ -1020,7 +1105,7 @@ export default function Farm3D() {
             )}
 
             {products.length === 0 ? (
-              <div className="text-center py-20 text-white/20"><Package size={44} className="mx-auto mb-3" /><p className="text-sm">Nenhuma venda registrada.</p></div>
+              <div className="text-center py-20 text-white/20"><Package size={44} className="mx-auto mb-3" /><p className="text-sm">Nenhuma venda registrada ainda.</p></div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gold/10">
                 <table className="w-full text-sm whitespace-nowrap">
@@ -1068,6 +1153,94 @@ export default function Farm3D() {
                     </tr></tfoot>
                   )}
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ ESTOQUE ══ */}
+        {tab==='estoque' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div><h2 className="text-gold font-serif text-lg">Estoque de Produtos</h2><p className="text-white/40 text-sm mt-0.5">Catálogo de produtos prontos para venda</p></div>
+              {!showStockForm && <button onClick={openAddStock} className="flex items-center gap-2 px-4 py-2 border border-gold text-gold text-sm hover:bg-gold hover:text-dark transition-all rounded"><Plus size={14} /> Adicionar Produto</button>}
+            </div>
+
+            {showStockForm && (
+              <div className="mb-6 bg-dark-200 border border-gold/20 rounded-lg p-5">
+                <h3 className="text-white/60 text-xs uppercase tracking-wider mb-4">{editStockId?'Editar Produto':'Novo Produto no Estoque'}</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                  <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Nome do Produto</label><input type="text" placeholder="Chaveiro Batman" value={stockForm.name} onChange={(e) => setStockForm((p) => ({ ...p, name:e.target.value }))} className={inputCls} autoFocus /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Filamento</label><select value={stockForm.filamentId} onChange={(e) => setStockForm((p) => ({ ...p, filamentId:e.target.value }))} className={selectCls}><option value="">Selecione...</option>{filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}</select></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Peso por peça (g)</label><input type="number" step="0.1" min="0" placeholder="5" value={stockForm.weightPerPieceG} onChange={(e) => setStockForm((p) => ({ ...p, weightPerPieceG:e.target.value }))} className={inputCls} /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Tempo de impressão (h)</label><input type="number" step="0.5" min="0" placeholder="1" value={stockForm.printTimeH} onChange={(e) => setStockForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label><input type="number" min="5" max="100" step="5" value={stockForm.infillPct} onChange={(e) => setStockForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label><input type="number" step="0.5" min="0" value={stockForm.purgeWasteG} onChange={(e) => setStockForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} /></div>
+                  <div><label className="block text-white/40 text-xs mb-1.5">Quantidade em estoque</label><input type="number" min="0" placeholder="0" value={stockForm.stockQty} onChange={(e) => setStockForm((p) => ({ ...p, stockQty:e.target.value }))} className={inputCls} /></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={saveStock} className="px-4 py-2 bg-gold text-dark text-sm font-semibold rounded hover:bg-gold-light transition-colors flex items-center gap-1.5"><Check size={14} /> Salvar</button>
+                  <button onClick={() => { setShowStockForm(false); setEditStockId(null) }} className="px-3 py-2 border border-white/15 text-white/50 text-sm rounded"><X size={14} /></button>
+                </div>
+              </div>
+            )}
+
+            {stockItems.length === 0 ? (
+              <div className="text-center py-20 text-white/20"><Archive size={44} className="mx-auto mb-3" /><p className="text-sm">Nenhum produto no catálogo ainda.</p><p className="text-xs mt-1">Adicione produtos para selecioná-los rapidamente na aba Vendas.</p></div>
+            ) : (
+              <div className="grid gap-3">
+                {stockItems.map((s) => {
+                  const fil = filaments.find((f) => f.id === s.filamentId)
+                  const calc = calcProduct({ id:'', name:'', quantity:1, filamentId:s.filamentId, weightPerPieceG:s.weightPerPieceG, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
+                  const lowStock = s.stockQty <= 2
+                  return (
+                    <div key={s.id} className={`bg-dark-200 border rounded-lg px-5 py-4 ${lowStock && s.stockQty === 0 ? 'border-red-400/20' : lowStock ? 'border-yellow-400/20' : 'border-gold/10'}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {fil && <div className="w-4 h-4 rounded-full border border-white/20 flex-shrink-0" style={{ backgroundColor:fil.color }} />}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white font-semibold">{s.name}</span>
+                              {fil && <span className="text-white/30 text-xs border border-white/10 px-1.5 rounded">{fil.name}</span>}
+                              {s.stockQty === 0 && <span className="text-xs px-1.5 py-0.5 rounded border text-red-400 bg-red-400/10 border-red-400/30">Sem estoque</span>}
+                              {s.stockQty > 0 && lowStock && <span className="text-xs px-1.5 py-0.5 rounded border text-yellow-400 bg-yellow-400/10 border-yellow-400/30">Estoque baixo</span>}
+                            </div>
+                            <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+                              <span className="text-white/40 text-xs">{s.weightPerPieceG}g · {s.printTimeH}h · infill {s.infillPct}%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6 flex-shrink-0">
+                          <div className="text-right">
+                            <p className="text-white/35 text-xs">Custo/peça</p>
+                            <p className="text-white font-mono text-sm">{fmt(calc.totalCost)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-white/35 text-xs">Sugerido (3×)</p>
+                            <p className="text-yellow-400 font-mono font-semibold">{fmt(calc.suggestedPrice)}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-white/35 text-xs mb-1">Estoque</p>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => addStockQty(s.id, -1)} className="w-6 h-6 flex items-center justify-center rounded border border-white/15 text-white/40 hover:text-red-400 hover:border-red-400/30 transition-colors"><Minus size={10} /></button>
+                              <span className={`w-8 text-center font-mono font-bold text-sm ${s.stockQty===0?'text-red-400':s.stockQty<=2?'text-yellow-400':'text-emerald-400'}`}>{s.stockQty}</span>
+                              <button onClick={() => addStockQty(s.id, 1)} className="w-6 h-6 flex items-center justify-center rounded border border-white/15 text-white/40 hover:text-emerald-400 hover:border-emerald-400/30 transition-colors"><Plus size={10} /></button>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => openEditStock(s)} className="text-white/30 hover:text-gold transition-colors p-1.5"><Edit2 size={13} /></button>
+                            <button onClick={() => deleteStock(s.id)} className="text-white/30 hover:text-red-400 transition-colors p-1.5"><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-gold/10 flex items-center gap-2">
+                        <button onClick={() => { openAddProd(); setProdForm((p) => ({ ...p, stockItemId:s.id, name:s.name, filamentId:s.filamentId, weightPerPieceG:String(s.weightPerPieceG), infillPct:String(s.infillPct), purgeWasteG:String(s.purgeWasteG), printTimeH:String(s.printTimeH) })); setTab('vendas') }} className="flex items-center gap-1.5 text-xs text-gold/70 hover:text-gold transition-colors">
+                          <Package size={11} /> Registrar venda deste produto
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
