@@ -93,15 +93,19 @@ const DEFAULT_TASKS: Omit<MaintenanceTask, 'id'>[] = [
 ]
 
 const ORDER_STATUS_FLOW: Order['status'][] = ['recebido','fabricando','pronto','entregue']
-const ORDER_STATUS_LABEL: Record<Order['status'], string> = {
+const ORDER_STATUS_LABEL: Record<string, string> = {
   recebido:'Recebido', fabricando:'P/ Fabricação', pronto:'Pronto p/ Entrega', entregue:'Entregue', cancelado:'Cancelado',
+  // compatibilidade com dados antigos
+  aguardando:'Recebido', imprimindo:'P/ Fabricação',
 }
-const ORDER_STATUS_COLOR: Record<Order['status'], string> = {
+const ORDER_STATUS_COLOR: Record<string, string> = {
   recebido:'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
   fabricando:'text-blue-400 bg-blue-400/10 border-blue-400/30',
   pronto:'text-purple-400 bg-purple-400/10 border-purple-400/30',
   entregue:'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
   cancelado:'text-white/30 bg-white/5 border-white/10',
+  aguardando:'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
+  imprimindo:'text-blue-400 bg-blue-400/10 border-blue-400/30',
 }
 
 // Firestore collection names
@@ -302,16 +306,16 @@ export default function Farm3D() {
   }
   async function saveProd() {
     if (!prodForm.name.trim() || !prodForm.filamentId || toNum(prodForm.quantity) <= 0) return
+    const isNew = !editProdId
     const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate, stockItemId:prodForm.stockItemId||undefined }
-    setProducts((p) => editProdId ? p.map((x) => x.id===editProdId ? prod : x) : [...p, prod])
-    await setDoc(doc(db, COL.products, prod.id), prod)
-    // Ao registrar uma nova venda, cria pedido automaticamente como "Pronto"
-    // O estoque só é decrementado quando o pedido for marcado como Entregue
-    if (!editProdId) {
+    setProducts((p) => isNew ? [...p, prod] : p.map((x) => x.id===prod.id ? prod : x))
+    try { await setDoc(doc(db, COL.products, prod.id), prod) } catch (e) { console.error('Erro ao salvar venda:', e) }
+    // Sempre cria pedido para novas vendas (manual ou de estoque)
+    if (isNew) {
       const qty = toNum(prodForm.quantity)
       const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'recebido', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
       setOrders((p) => [o, ...p])
-      await setDoc(doc(db, COL.orders, o.id), o)
+      try { await setDoc(doc(db, COL.orders, o.id), o) } catch (e) { console.error('Erro ao salvar pedido:', e) }
     }
     setShowProdForm(false); setEditProdId(null)
   }
@@ -853,7 +857,7 @@ export default function Farm3D() {
                             </button>
                           )}
                           <button onClick={() => openEditOrder(o)} className="text-white/30 hover:text-gold transition-colors p-1"><Edit2 size={13} /></button>
-                          {o.status!=='cancelado' && o.status!=='entregue' && <button onClick={() => updateOrder(o.id, { status:'cancelado' })} className="text-white/30 hover:text-red-400 transition-colors p-1"><XCircle size={13} /></button>}
+                          {o.status!=='cancelado' && <button onClick={() => updateOrder(o.id, { status:'cancelado' })} className="text-white/30 hover:text-red-400 transition-colors p-1"><XCircle size={13} /></button>}
                           <button onClick={() => deleteOrder(o.id)} className="text-white/20 hover:text-red-400 transition-colors p-1"><Trash2 size={13} /></button>
                         </div>
                       </div>
