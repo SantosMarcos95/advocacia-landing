@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Plus, Trash2, Edit2, Check, X, Settings, Layers, ArrowLeft,
   LayoutDashboard, Package, Wrench, AlertTriangle, ShoppingCart,
@@ -23,9 +23,12 @@ interface CostConfig {
   depreciationPerHour: number; printerTotalH: number
   reinvestPct: number; paymentPct: number; reservePct: number
 }
+interface FilamentEntry { filamentId: string; weightG: number }
 interface Product {
-  id: string; name: string; quantity: number; filamentId: string
-  weightPerPieceG: number; infillPct: number; purgeWasteG: number
+  id: string; name: string; quantity: number
+  filaments: FilamentEntry[]
+  filamentId?: string; weightPerPieceG?: number  // legacy
+  infillPct: number; purgeWasteG: number
   printTimeH: number; realSellingPrice: number; saleDate: string
   stockItemId?: string
 }
@@ -48,8 +51,10 @@ interface Order {
 }
 interface MonthlyGoal { month: string; target: number }
 interface StockItem {
-  id: string; name: string; filamentId: string
-  weightPerPieceG: number; infillPct: number; purgeWasteG: number
+  id: string; name: string
+  filaments: FilamentEntry[]
+  filamentId?: string; weightPerPieceG?: number  // legacy
+  infillPct: number; purgeWasteG: number
   printTimeH: number; stockQty: number
 }
 
@@ -119,13 +124,25 @@ const CFG_DOC = () => doc(db, 'farm3d_config', 'main')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function getFilamentEntries(item: { filaments?: FilamentEntry[]; filamentId?: string; weightPerPieceG?: number }): FilamentEntry[] {
+  if (item.filaments && item.filaments.length > 0) return item.filaments
+  if (item.filamentId) return [{ filamentId: item.filamentId, weightG: item.weightPerPieceG || 0 }]
+  return []
+}
+
 function calcProduct(p: Product, filaments: Filament[], cfg: CostConfig) {
-  const fil = filaments.find((f) => f.id === p.filamentId)
-  const pricePerKg = fil?.pricePerKg ?? 0
+  const entries = getFilamentEntries(p)
   const elec = (cfg.printerWatts / 1000) * cfg.electricityKwh
   const machineH = elec + cfg.depreciationPerHour
-  const costPerPiece = (pricePerKg / 1000) * p.weightPerPieceG * 1.1 + p.printTimeH * machineH
-  const purgeCost = (pricePerKg / 1000) * (p.purgeWasteG || 0)
+  const filCostPerPiece = entries.reduce((sum, e) => {
+    const fil = filaments.find((f) => f.id === e.filamentId)
+    return sum + (fil ? (fil.pricePerKg / 1000) * e.weightG * 1.1 : 0)
+  }, 0)
+  const costPerPiece = filCostPerPiece + p.printTimeH * machineH
+  const avgPricePerKg = entries.length > 0
+    ? entries.reduce((s, e) => { const fil = filaments.find((f) => f.id === e.filamentId); return s + (fil?.pricePerKg || 0) }, 0) / entries.length
+    : 0
+  const purgeCost = (avgPricePerKg / 1000) * (p.purgeWasteG || 0)
   const totalCost = costPerPiece * p.quantity + purgeCost
   const suggestedPrice = totalCost * 3
   const netProfit = p.realSellingPrice - totalCost
@@ -173,8 +190,8 @@ function Card({ label, value, sub, color='text-white' }: { label:string; value:s
 
 // ─── Empty forms ──────────────────────────────────────────────────────────────
 const EMPTY_FIL = { name:'', color:'#f97316', pricePerKg:'', stockG:'', material:'PLA', nozzleTempC:'210', bedTempC:'60' }
-const EMPTY_PROD = { name:'', quantity:'1', filamentId:'', weightPerPieceG:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', realSellingPrice:'', saleDate:today(), stockItemId:'' }
-const EMPTY_STOCK = { name:'', filamentId:'', weightPerPieceG:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', stockQty:'0' }
+const EMPTY_PROD = { name:'', quantity:'1', infillPct:'15', purgeWasteG:'0', printTimeH:'', realSellingPrice:'', saleDate:today(), stockItemId:'' }
+const EMPTY_STOCK = { name:'', infillPct:'15', purgeWasteG:'0', printTimeH:'', stockQty:'0' }
 const EMPTY_FAIL = { date:today(), description:'', filamentId:'', wastedG:'', wastedTimeH:'', reason:'outro', notes:'' }
 const EMPTY_ORDER = { clientName:'', clientContact:'', productName:'', quantity:'1', unitPrice:'', orderDate:today(), dueDate:'', notes:'' }
 
@@ -215,6 +232,9 @@ export default function Farm3D() {
   const [showStockForm, setShowStockForm] = useState(false)
   const [editStockId, setEditStockId] = useState<string|null>(null)
   const [stockForm, setStockForm] = useState(EMPTY_STOCK)
+  const filFormRef = useRef<HTMLDivElement>(null)
+  const [prodFilaments, setProdFilaments] = useState<{filamentId:string; weightG:string}[]>([{filamentId:'', weightG:''}])
+  const [stockFilaments, setStockFilaments] = useState<{filamentId:string; weightG:string}[]>([{filamentId:'', weightG:''}])
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -285,6 +305,7 @@ export default function Farm3D() {
   function openEditFil(f: Filament) {
     setFilForm({ name:f.name, color:f.color, pricePerKg:String(f.pricePerKg), stockG:String(f.stockG||''), material:f.material||'PLA', nozzleTempC:String(f.nozzleTempC||210), bedTempC:String(f.bedTempC||60) })
     setEditFilId(f.id); setShowFilForm(true)
+    setTimeout(() => filFormRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 50)
   }
   async function saveFil() {
     if (!filForm.name.trim() || toNum(filForm.pricePerKg) <= 0) return
@@ -299,15 +320,18 @@ export default function Farm3D() {
   }
 
   // ── Products ──────────────────────────────────────────────────────────────
-  function openAddProd() { setProdForm({ ...EMPTY_PROD, saleDate:today() }); setEditProdId(null); setShowProdForm(true) }
+  function openAddProd() { setProdForm({ ...EMPTY_PROD, saleDate:today() }); setProdFilaments([{filamentId:'', weightG:''}]); setEditProdId(null); setShowProdForm(true) }
   function openEditProd(p: Product) {
-    setProdForm({ name:p.name, quantity:String(p.quantity), filamentId:p.filamentId, weightPerPieceG:String(p.weightPerPieceG), infillPct:String(p.infillPct||15), purgeWasteG:String(p.purgeWasteG||0), printTimeH:String(p.printTimeH), realSellingPrice:String(p.realSellingPrice), saleDate:p.saleDate||today(), stockItemId:p.stockItemId||'' })
+    const entries = getFilamentEntries(p)
+    setProdForm({ name:p.name, quantity:String(p.quantity), infillPct:String(p.infillPct||15), purgeWasteG:String(p.purgeWasteG||0), printTimeH:String(p.printTimeH), realSellingPrice:String(p.realSellingPrice), saleDate:p.saleDate||today(), stockItemId:p.stockItemId||'' })
+    setProdFilaments(entries.length > 0 ? entries.map(e => ({ filamentId:e.filamentId, weightG:String(e.weightG) })) : [{filamentId:'', weightG:''}])
     setEditProdId(p.id); setShowProdForm(true)
   }
   async function saveProd() {
-    if (!prodForm.name.trim() || !prodForm.filamentId || toNum(prodForm.quantity) <= 0) return
+    const validFilaments = prodFilaments.filter(e => e.filamentId)
+    if (!prodForm.name.trim() || validFilaments.length === 0 || toNum(prodForm.quantity) <= 0) return
     const isNew = !editProdId
-    const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate, stockItemId:prodForm.stockItemId||undefined }
+    const prod: Product = { id:editProdId||uid(), name:prodForm.name.trim(), quantity:toNum(prodForm.quantity), filaments:validFilaments.map(e => ({ filamentId:e.filamentId, weightG:toNum(e.weightG) })), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate, stockItemId:prodForm.stockItemId||undefined }
     setProducts((p) => isNew ? [...p, prod] : p.map((x) => x.id===prod.id ? prod : x))
     try { await setDoc(doc(db, COL.products, prod.id), prod) } catch (e) { console.error('Erro ao salvar venda:', e) }
     // Sempre cria pedido para novas vendas (manual ou de estoque)
@@ -407,14 +431,17 @@ export default function Farm3D() {
   }
 
   // ── Stock ─────────────────────────────────────────────────────────────────
-  function openAddStock() { setStockForm(EMPTY_STOCK); setEditStockId(null); setShowStockForm(true) }
+  function openAddStock() { setStockForm(EMPTY_STOCK); setStockFilaments([{filamentId:'', weightG:''}]); setEditStockId(null); setShowStockForm(true) }
   function openEditStock(s: StockItem) {
-    setStockForm({ name:s.name, filamentId:s.filamentId, weightPerPieceG:String(s.weightPerPieceG), infillPct:String(s.infillPct||15), purgeWasteG:String(s.purgeWasteG||0), printTimeH:String(s.printTimeH), stockQty:String(s.stockQty||0) })
+    const entries = getFilamentEntries(s)
+    setStockForm({ name:s.name, infillPct:String(s.infillPct||15), purgeWasteG:String(s.purgeWasteG||0), printTimeH:String(s.printTimeH), stockQty:String(s.stockQty||0) })
+    setStockFilaments(entries.length > 0 ? entries.map(e => ({ filamentId:e.filamentId, weightG:String(e.weightG) })) : [{filamentId:'', weightG:''}])
     setEditStockId(s.id); setShowStockForm(true)
   }
   async function saveStock() {
-    if (!stockForm.name.trim() || !stockForm.filamentId) return
-    const s: StockItem = { id:editStockId||uid(), name:stockForm.name.trim(), filamentId:stockForm.filamentId, weightPerPieceG:toNum(stockForm.weightPerPieceG), infillPct:toNum(stockForm.infillPct), purgeWasteG:toNum(stockForm.purgeWasteG), printTimeH:toNum(stockForm.printTimeH), stockQty:toNum(stockForm.stockQty) }
+    const validFilaments = stockFilaments.filter(e => e.filamentId)
+    if (!stockForm.name.trim() || validFilaments.length === 0) return
+    const s: StockItem = { id:editStockId||uid(), name:stockForm.name.trim(), filaments:validFilaments.map(e => ({ filamentId:e.filamentId, weightG:toNum(e.weightG) })), infillPct:toNum(stockForm.infillPct), purgeWasteG:toNum(stockForm.purgeWasteG), printTimeH:toNum(stockForm.printTimeH), stockQty:toNum(stockForm.stockQty) }
     setStockItems((p) => editStockId ? p.map((x) => x.id===editStockId ? s : x) : [...p, s])
     await setDoc(doc(db, COL.stock, s.id), s)
     setShowStockForm(false); setEditStockId(null)
@@ -456,13 +483,17 @@ export default function Farm3D() {
   const failsCost = thisMonthFails.reduce((s, f) => s + calcFailedCost(f, filaments, config), 0)
   const activeOrders = orders.filter((o) => o.status!=='entregue' && o.status!=='cancelado')
   const filamentConsumption = filaments.map((f) => {
-    const consumedG = products.filter((p) => p.filamentId===f.id).reduce((s, p) => s+p.weightPerPieceG*p.quantity, 0)
+    const consumedG = products.reduce((s, p) => {
+      const entries = getFilamentEntries(p)
+      return s + entries.filter(e => e.filamentId===f.id).reduce((acc, e) => acc + e.weightG * p.quantity, 0)
+    }, 0)
     return { ...f, consumedG, remainingG:(f.stockG||0)-consumedG }
   })
   const productStats = products.map((p) => ({ ...p, ...calcProduct(p, filaments, config) })).sort((a,b) => b.netProfit-a.netProfit)
   const previewCalc = (() => {
-    if (!prodForm.filamentId || !prodForm.weightPerPieceG || !prodForm.printTimeH || !prodForm.quantity) return null
-    return calcProduct({ id:'', name:'', quantity:toNum(prodForm.quantity), filamentId:prodForm.filamentId, weightPerPieceG:toNum(prodForm.weightPerPieceG), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate }, filaments, config)
+    const validFil = prodFilaments.filter(e => e.filamentId && e.weightG)
+    if (!validFil.length || !prodForm.printTimeH || !prodForm.quantity) return null
+    return calcProduct({ id:'', name:'', quantity:toNum(prodForm.quantity), filaments:validFil.map(e => ({ filamentId:e.filamentId, weightG:toNum(e.weightG) })), infillPct:toNum(prodForm.infillPct), purgeWasteG:toNum(prodForm.purgeWasteG), printTimeH:toNum(prodForm.printTimeH), realSellingPrice:toNum(prodForm.realSellingPrice), saleDate:prodForm.saleDate }, filaments, config)
   })()
 
   // All months with data (goals or sales), sorted desc
@@ -728,11 +759,12 @@ export default function Farm3D() {
                       </tr></thead>
                       <tbody>
                         {productStats.map((p, i) => {
-                          const fil = filaments.find((f) => f.id===p.filamentId)
+                          const pEntries = getFilamentEntries(p)
+                          const pFils = pEntries.map(e => filaments.find(f => f.id===e.filamentId)).filter(Boolean) as Filament[]
                           const margin = p.realSellingPrice > 0 ? (p.netProfit/p.realSellingPrice)*100 : 0
                           return (
                             <tr key={p.id} className={`border-b border-gold/5 ${i%2===1?'bg-dark-200/30':''}`}>
-                              <td className="px-4 py-3"><div className="flex items-center gap-2">{fil && <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor:fil.color }} />}<span className="text-white font-medium">{p.name}</span></div></td>
+                              <td className="px-4 py-3"><div className="flex items-center gap-2">{pFils.map((f,i) => <div key={i} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor:f.color }} />)}<span className="text-white font-medium">{p.name}</span></div></td>
                               <td className="px-4 py-3 text-white/60 font-mono">{p.quantity}</td>
                               <td className="px-4 py-3 text-white font-mono">{fmt(p.realSellingPrice)}</td>
                               <td className="px-4 py-3 text-white/60 font-mono">{fmt(p.totalCost)}</td>
@@ -994,7 +1026,7 @@ export default function Farm3D() {
             </div>
 
             {showFilForm && (
-              <div className="mb-6 bg-dark-200 border border-gold/20 rounded-lg p-5">
+              <div ref={filFormRef} className="mb-6 bg-dark-200 border border-gold/20 rounded-lg p-5">
                 <h3 className="text-white/60 text-xs uppercase tracking-wider mb-4">{editFilId?'Editar':'Novo Filamento'}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Nome</label><input type="text" placeholder="PLA Preto" value={filForm.name} onChange={(e) => setFilForm((p) => ({ ...p, name:e.target.value }))} className={inputCls} autoFocus /></div>
@@ -1023,7 +1055,7 @@ export default function Farm3D() {
             ) : (
               <div className="grid gap-2">
                 {filaments.map((f) => {
-                  const consumed = products.filter((p) => p.filamentId===f.id).reduce((s,p) => s+p.weightPerPieceG*p.quantity, 0)
+                  const consumed = products.reduce((s, p) => { const es = getFilamentEntries(p); return s + es.filter(e => e.filamentId===f.id).reduce((acc, e) => acc + e.weightG * p.quantity, 0) }, 0)
                   const remaining = (f.stockG||0) - consumed
                   return (
                     <div key={f.id} className="bg-dark-200 border border-gold/10 rounded-lg px-4 py-3 hover:border-gold/20 transition-colors">
@@ -1074,7 +1106,9 @@ export default function Farm3D() {
                       onChange={(e) => {
                         const si = stockItems.find((s) => s.id === e.target.value)
                         if (si) {
-                          setProdForm((p) => ({ ...p, stockItemId:e.target.value, name:si.name, filamentId:si.filamentId, weightPerPieceG:String(si.weightPerPieceG), infillPct:String(si.infillPct), purgeWasteG:String(si.purgeWasteG), printTimeH:String(si.printTimeH) }))
+                          const entries = getFilamentEntries(si)
+                          setProdForm((p) => ({ ...p, stockItemId:e.target.value, name:si.name, infillPct:String(si.infillPct), purgeWasteG:String(si.purgeWasteG), printTimeH:String(si.printTimeH) }))
+                          setProdFilaments(entries.length > 0 ? entries.map(e => ({ filamentId:e.filamentId, weightG:String(e.weightG) })) : [{filamentId:'', weightG:''}])
                         } else {
                           setProdForm((p) => ({ ...p, stockItemId:'' }))
                         }
@@ -1083,22 +1117,52 @@ export default function Farm3D() {
                     >
                       <option value="">— Preencher manualmente —</option>
                       {stockItems.map((s) => {
-                        const fil = filaments.find((f) => f.id === s.filamentId)
-                        const calc = calcProduct({ id:'', name:'', quantity:1, filamentId:s.filamentId, weightPerPieceG:s.weightPerPieceG, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
-                        return <option key={s.id} value={s.id}>{s.name}{fil?` (${fil.name})`:''} — Sugerido: {fmt(calc.suggestedPrice)} — Estoque: {s.stockQty} un.</option>
+                        const sEntries = getFilamentEntries(s)
+                        const sNames = sEntries.map(e => filaments.find(f => f.id===e.filamentId)?.name).filter(Boolean).join(', ')
+                        const calc = calcProduct({ id:'', name:'', quantity:1, filaments:sEntries, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
+                        return <option key={s.id} value={s.id}>{s.name}{sNames?` (${sNames})`:''} — Sugerido: {fmt(calc.suggestedPrice)} — Estoque: {s.stockQty} un.</option>
                       })}
                     </select>
                   </div>
                 )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Nome do Produto</label><input type="text" placeholder="Chaveiro" value={prodForm.name} onChange={(e) => setProdForm((p) => ({ ...p, name:e.target.value }))} className={inputCls} autoFocus /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Filamento</label><select value={prodForm.filamentId} onChange={(e) => setProdForm((p) => ({ ...p, filamentId:e.target.value }))} className={selectCls}><option value="">Selecione...</option>{filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}</select></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Quantidade</label><input type="number" min="1" value={prodForm.quantity} onChange={(e) => setProdForm((p) => ({ ...p, quantity:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Data da Venda</label><input type="date" value={prodForm.saleDate} onChange={(e) => setProdForm((p) => ({ ...p, saleDate:e.target.value }))} className={inputCls} /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Peso por peça (g)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.weightPerPieceG || '—'}g</p> : <input type="number" step="0.1" min="0" placeholder="5" value={prodForm.weightPerPieceG} onChange={(e) => setProdForm((p) => ({ ...p, weightPerPieceG:e.target.value }))} className={inputCls} />}</div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Tempo por peça (h)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.printTimeH || '—'}h</p> : <input type="number" step="0.5" min="0" placeholder="1" value={prodForm.printTimeH} onChange={(e) => setProdForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} />}</div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.infillPct || '—'}%</p> : <input type="number" min="5" max="100" step="5" value={prodForm.infillPct} onChange={(e) => setProdForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} />}</div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label>{prodForm.stockItemId ? <p className="px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{prodForm.purgeWasteG || '0'}g</p> : <input type="number" step="0.5" min="0" value={prodForm.purgeWasteG} onChange={(e) => setProdForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} />}</div>
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-white/40 text-xs">Filamentos</label>
+                      {!prodForm.stockItemId && <button type="button" onClick={() => setProdFilaments(p => [...p, {filamentId:'', weightG:''}])} className="flex items-center gap-1 text-xs text-gold/60 hover:text-gold transition-colors"><Plus size={10}/> Adicionar cor</button>}
+                    </div>
+                    <div className="space-y-1.5">
+                      {prodFilaments.map((fil, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          {prodForm.stockItemId ? (
+                            <p className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">
+                              {filaments.find(f => f.id===fil.filamentId)?.name || '—'}
+                            </p>
+                          ) : (
+                            <select value={fil.filamentId} onChange={(e) => setProdFilaments(p => p.map((x,i) => i===idx ? {...x, filamentId:e.target.value} : x))} className={`flex-1 ${selectCls}`}>
+                              <option value="">Selecione...</option>
+                              {filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}
+                            </select>
+                          )}
+                          {prodForm.stockItemId ? (
+                            <p className="w-24 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/60 text-sm font-mono">{fil.weightG || '—'}g</p>
+                          ) : (
+                            <input type="number" step="0.1" min="0" placeholder="g" value={fil.weightG} onChange={(e) => setProdFilaments(p => p.map((x,i) => i===idx ? {...x, weightG:e.target.value} : x))} className="w-24 bg-dark border border-gold/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-gold/50" />
+                          )}
+                          <span className="text-white/30 text-xs flex-shrink-0">g</span>
+                          {!prodForm.stockItemId && prodFilaments.length > 1 && (
+                            <button type="button" onClick={() => setProdFilaments(p => p.filter((_,i) => i!==idx))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={12}/></button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div className="col-span-2 sm:col-span-1">
                     <label className="block text-white/40 text-xs mb-1.5">Total recebido (R$)</label>
                     <input type="number" step="0.01" min="0" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value }))} className={inputCls} />
@@ -1126,21 +1190,23 @@ export default function Farm3D() {
               <div className="overflow-x-auto rounded-lg border border-gold/10">
                 <table className="w-full text-sm whitespace-nowrap">
                   <thead><tr className="bg-dark-300 border-b border-gold/10">
-                    {['Item','Data','Qtd','Fil./kg','Peso','Infill','Tempo','Custo','Sugerido 3×','Venda','Lucro','Reinvestir','Pagamento','Reserva',''].map((h) => (
+                    {['Item','Data','Qtd','Filamentos','Peso Total','Infill','Tempo','Custo','Sugerido 3×','Venda','Lucro','Reinvestir','Pagamento','Reserva',''].map((h) => (
                       <th key={h} className="text-left px-3 py-3 text-white/35 font-medium text-xs uppercase tracking-wide">{h}</th>
                     ))}
                   </tr></thead>
                   <tbody>
                     {products.map((p, i) => {
-                      const fil = filaments.find((f) => f.id===p.filamentId)
+                      const pEntries = getFilamentEntries(p)
+                      const pFils = pEntries.map(e => filaments.find(f => f.id===e.filamentId)).filter(Boolean) as Filament[]
                       const c = calcProduct(p, filaments, config)
+                      const totalWeightG = pEntries.reduce((s, e) => s + e.weightG, 0)
                       return (
                         <tr key={p.id} className={`border-b border-gold/5 hover:bg-dark-200/60 transition-colors ${i%2===1?'bg-dark-200/20':''}`}>
-                          <td className="px-3 py-3 font-medium text-white"><div className="flex items-center gap-2">{fil && <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor:fil.color }} />}{p.name}</div></td>
+                          <td className="px-3 py-3 font-medium text-white"><div className="flex items-center gap-2">{pFils.map((f,i) => <div key={i} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor:f.color }} />)}{p.name}</div></td>
                           <td className="px-3 py-3 text-white/40 font-mono text-xs">{p.saleDate||'—'}</td>
                           <td className="px-3 py-3 text-white/60">{p.quantity}</td>
-                          <td className="px-3 py-3 text-white/70 font-mono">{fil?fmt(fil.pricePerKg):'—'}</td>
-                          <td className="px-3 py-3 text-white/60 font-mono">{p.weightPerPieceG}g</td>
+                          <td className="px-3 py-3 text-white/70 font-mono text-xs">{pFils.length > 0 ? pFils.map(f => f.name).join(', ') : '—'}</td>
+                          <td className="px-3 py-3 text-white/60 font-mono">{totalWeightG}g</td>
                           <td className="px-3 py-3 text-white/50 font-mono">{p.infillPct||15}%</td>
                           <td className="px-3 py-3 text-white/60 font-mono">{p.printTimeH}h</td>
                           <td className="px-3 py-3 text-white font-mono">{fmt(c.totalCost)}</td>
@@ -1187,12 +1253,31 @@ export default function Farm3D() {
                 <h3 className="text-white/60 text-xs uppercase tracking-wider mb-4">{editStockId?'Editar Produto':'Novo Produto no Estoque'}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                   <div className="col-span-2 sm:col-span-1"><label className="block text-white/40 text-xs mb-1.5">Nome do Produto</label><input type="text" placeholder="Chaveiro Batman" value={stockForm.name} onChange={(e) => setStockForm((p) => ({ ...p, name:e.target.value }))} className={inputCls} autoFocus /></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Filamento</label><select value={stockForm.filamentId} onChange={(e) => setStockForm((p) => ({ ...p, filamentId:e.target.value }))} className={selectCls}><option value="">Selecione...</option>{filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}</select></div>
-                  <div><label className="block text-white/40 text-xs mb-1.5">Peso por peça (g)</label><input type="number" step="0.1" min="0" placeholder="5" value={stockForm.weightPerPieceG} onChange={(e) => setStockForm((p) => ({ ...p, weightPerPieceG:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Tempo de impressão (h)</label><input type="number" step="0.5" min="0" placeholder="1" value={stockForm.printTimeH} onChange={(e) => setStockForm((p) => ({ ...p, printTimeH:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Infill (%)</label><input type="number" min="5" max="100" step="5" value={stockForm.infillPct} onChange={(e) => setStockForm((p) => ({ ...p, infillPct:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Purga AMS (g)</label><input type="number" step="0.5" min="0" value={stockForm.purgeWasteG} onChange={(e) => setStockForm((p) => ({ ...p, purgeWasteG:e.target.value }))} className={inputCls} /></div>
                   <div><label className="block text-white/40 text-xs mb-1.5">Quantidade em estoque</label><input type="number" min="0" placeholder="0" value={stockForm.stockQty} onChange={(e) => setStockForm((p) => ({ ...p, stockQty:e.target.value }))} className={inputCls} /></div>
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-white/40 text-xs">Filamentos (cor + gramas por peça)</label>
+                      <button type="button" onClick={() => setStockFilaments(p => [...p, {filamentId:'', weightG:''}])} className="flex items-center gap-1 text-xs text-gold/60 hover:text-gold transition-colors"><Plus size={10}/> Adicionar cor</button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {stockFilaments.map((fil, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <select value={fil.filamentId} onChange={(e) => setStockFilaments(p => p.map((x,i) => i===idx ? {...x, filamentId:e.target.value} : x))} className={`flex-1 ${selectCls}`}>
+                            <option value="">Selecione...</option>
+                            {filaments.map((f) => <option key={f.id} value={f.id}>{f.name} — {fmt(f.pricePerKg)}/kg</option>)}
+                          </select>
+                          <input type="number" step="0.1" min="0" placeholder="g" value={fil.weightG} onChange={(e) => setStockFilaments(p => p.map((x,i) => i===idx ? {...x, weightG:e.target.value} : x))} className="w-24 bg-dark border border-gold/20 rounded px-3 py-2 text-white text-sm outline-none focus:border-gold/50" />
+                          <span className="text-white/30 text-xs flex-shrink-0">g</span>
+                          {stockFilaments.length > 1 && (
+                            <button type="button" onClick={() => setStockFilaments(p => p.filter((_,i) => i!==idx))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={12}/></button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={saveStock} className="px-4 py-2 bg-gold text-dark text-sm font-semibold rounded hover:bg-gold-light transition-colors flex items-center gap-1.5"><Check size={14} /> Salvar</button>
@@ -1206,23 +1291,31 @@ export default function Farm3D() {
             ) : (
               <div className="grid gap-3">
                 {stockItems.map((s) => {
-                  const fil = filaments.find((f) => f.id === s.filamentId)
-                  const calc = calcProduct({ id:'', name:'', quantity:1, filamentId:s.filamentId, weightPerPieceG:s.weightPerPieceG, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
+                  const sEntries = getFilamentEntries(s)
+                  const sFils = sEntries.map(e => filaments.find(f => f.id===e.filamentId)).filter(Boolean) as Filament[]
+                  const calc = calcProduct({ id:'', name:'', quantity:1, filaments:sEntries, infillPct:s.infillPct, purgeWasteG:s.purgeWasteG, printTimeH:s.printTimeH, realSellingPrice:0, saleDate:'' }, filaments, config)
+                  const totalWeightG = sEntries.reduce((acc, e) => acc + e.weightG, 0)
                   const lowStock = s.stockQty <= 2
                   return (
                     <div key={s.id} className={`bg-dark-200 border rounded-lg px-5 py-4 ${lowStock && s.stockQty === 0 ? 'border-red-400/20' : lowStock ? 'border-yellow-400/20' : 'border-gold/10'}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {fil && <div className="w-4 h-4 rounded-full border border-white/20 flex-shrink-0" style={{ backgroundColor:fil.color }} />}
+                          <div className="flex flex-shrink-0 -space-x-1.5">
+                            {sFils.map((f, i) => <div key={i} className="w-4 h-4 rounded-full border-2 border-dark-200" style={{ backgroundColor:f.color }} />)}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-white font-semibold">{s.name}</span>
-                              {fil && <span className="text-white/30 text-xs border border-white/10 px-1.5 rounded">{fil.name}</span>}
+                              {sFils.map((f, i) => <span key={i} className="text-white/30 text-xs border border-white/10 px-1.5 rounded">{f.name}</span>)}
                               {s.stockQty === 0 && <span className="text-xs px-1.5 py-0.5 rounded border text-red-400 bg-red-400/10 border-red-400/30">Sem estoque</span>}
                               {s.stockQty > 0 && lowStock && <span className="text-xs px-1.5 py-0.5 rounded border text-yellow-400 bg-yellow-400/10 border-yellow-400/30">Estoque baixo</span>}
                             </div>
                             <div className="flex items-center gap-4 mt-1.5 flex-wrap">
-                              <span className="text-white/40 text-xs">{s.weightPerPieceG}g · {s.printTimeH}h · infill {s.infillPct}%</span>
+                              <span className="text-white/40 text-xs">{totalWeightG}g total · {s.printTimeH}h · infill {s.infillPct}%</span>
+                              {sEntries.length > 1 && sEntries.map((e, i) => {
+                                const f = filaments.find(f => f.id===e.filamentId)
+                                return f ? <span key={i} className="text-white/25 text-xs">{f.name}: {e.weightG}g</span> : null
+                              })}
                             </div>
                           </div>
                         </div>
@@ -1250,7 +1343,7 @@ export default function Farm3D() {
                         </div>
                       </div>
                       <div className="mt-3 pt-3 border-t border-gold/10 flex items-center gap-2">
-                        <button onClick={() => { openAddProd(); setProdForm((p) => ({ ...p, stockItemId:s.id, name:s.name, filamentId:s.filamentId, weightPerPieceG:String(s.weightPerPieceG), infillPct:String(s.infillPct), purgeWasteG:String(s.purgeWasteG), printTimeH:String(s.printTimeH) })); setTab('vendas') }} className="flex items-center gap-1.5 text-xs text-gold/70 hover:text-gold transition-colors">
+                        <button onClick={() => { openAddProd(); const sEnt = getFilamentEntries(s); setProdForm((p) => ({ ...p, stockItemId:s.id, name:s.name, infillPct:String(s.infillPct), purgeWasteG:String(s.purgeWasteG), printTimeH:String(s.printTimeH) })); setProdFilaments(sEnt.length > 0 ? sEnt.map(e => ({ filamentId:e.filamentId, weightG:String(e.weightG) })) : [{filamentId:'', weightG:''}]); setTab('vendas') }} className="flex items-center gap-1.5 text-xs text-gold/70 hover:text-gold transition-colors">
                           <Package size={11} /> Registrar venda deste produto
                         </button>
                       </div>
