@@ -42,7 +42,7 @@ interface FailedPrint {
 interface Order {
   id: string; clientName: string; clientContact: string
   productName: string; quantity: number; unitPrice: number
-  status: 'aguardando'|'imprimindo'|'pronto'|'entregue'|'cancelado'
+  status: 'recebido'|'fabricando'|'pronto'|'entregue'|'cancelado'
   paid: boolean; orderDate: string; dueDate: string; notes: string
   stockItemId?: string
 }
@@ -92,13 +92,13 @@ const DEFAULT_TASKS: Omit<MaintenanceTask, 'id'>[] = [
   { name: 'Troca do Tubo PTFE', description: 'Substituir tubos PTFE do extrusor e do AMS', intervalH: 500, lastDoneAtH: 0 },
 ]
 
-const ORDER_STATUS_FLOW: Order['status'][] = ['aguardando','imprimindo','pronto','entregue']
+const ORDER_STATUS_FLOW: Order['status'][] = ['recebido','fabricando','pronto','entregue']
 const ORDER_STATUS_LABEL: Record<Order['status'], string> = {
-  aguardando:'Aguardando', imprimindo:'Imprimindo', pronto:'Pronto', entregue:'Entregue', cancelado:'Cancelado',
+  recebido:'Recebido', fabricando:'P/ Fabricação', pronto:'Pronto p/ Entrega', entregue:'Entregue', cancelado:'Cancelado',
 }
 const ORDER_STATUS_COLOR: Record<Order['status'], string> = {
-  aguardando:'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
-  imprimindo:'text-blue-400 bg-blue-400/10 border-blue-400/30',
+  recebido:'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
+  fabricando:'text-blue-400 bg-blue-400/10 border-blue-400/30',
   pronto:'text-purple-400 bg-purple-400/10 border-purple-400/30',
   entregue:'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
   cancelado:'text-white/30 bg-white/5 border-white/10',
@@ -309,7 +309,7 @@ export default function Farm3D() {
     // O estoque só é decrementado quando o pedido for marcado como Entregue
     if (!editProdId) {
       const qty = toNum(prodForm.quantity)
-      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'pronto', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
+      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'recebido', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
       setOrders((p) => [o, ...p])
       await setDoc(doc(db, COL.orders, o.id), o)
     }
@@ -366,7 +366,7 @@ export default function Farm3D() {
       setOrders((p) => p.map((o) => o.id===editOrderId ? updated : o))
       await setDoc(doc(db, COL.orders, editOrderId), updated)
     } else {
-      const o: Order = { id:uid(), clientName:orderForm.clientName.trim(), clientContact:orderForm.clientContact, productName:orderForm.productName.trim(), quantity:toNum(orderForm.quantity), unitPrice:toNum(orderForm.unitPrice), status:'aguardando', paid:false, orderDate:orderForm.orderDate, dueDate:orderForm.dueDate, notes:orderForm.notes }
+      const o: Order = { id:uid(), clientName:orderForm.clientName.trim(), clientContact:orderForm.clientContact, productName:orderForm.productName.trim(), quantity:toNum(orderForm.quantity), unitPrice:toNum(orderForm.unitPrice), status:'recebido', paid:false, orderDate:orderForm.orderDate, dueDate:orderForm.dueDate, notes:orderForm.notes }
       setOrders((p) => [o, ...p])
       await setDoc(doc(db, COL.orders, o.id), o)
     }
@@ -378,11 +378,20 @@ export default function Farm3D() {
     setOrders(updated)
     const o = updated.find((x) => x.id===id)!
     await setDoc(doc(db, COL.orders, id), o)
-    // Decrementa estoque quando pedido é marcado como Entregue
+    // Decrementa estoque quando marcado como Entregue
     if (patch.status === 'entregue' && prev?.status !== 'entregue' && o.stockItemId) {
       const si = stockItems.find((s) => s.id === o.stockItemId)
       if (si) {
         const siUpdated = { ...si, stockQty: Math.max(0, si.stockQty - o.quantity) }
+        setStockItems((p) => p.map((s) => s.id === si.id ? siUpdated : s))
+        await setDoc(doc(db, COL.stock, si.id), siUpdated)
+      }
+    }
+    // Devolve ao estoque quando cancelado (só se já estava Entregue)
+    if (patch.status === 'cancelado' && prev?.status === 'entregue' && o.stockItemId) {
+      const si = stockItems.find((s) => s.id === o.stockItemId)
+      if (si) {
+        const siUpdated = { ...si, stockQty: si.stockQty + o.quantity }
         setStockItems((p) => p.map((s) => s.id === si.id ? siUpdated : s))
         await setDoc(doc(db, COL.stock, si.id), siUpdated)
       }
