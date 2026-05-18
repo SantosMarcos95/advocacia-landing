@@ -167,10 +167,14 @@ function calcProduct(p: Product, filaments: Filament[], cfg: CostConfig) {
   const listingPrice = mktTier && commissionPct < 100
     ? (p.realSellingPrice + fixedFee) / (1 - commissionPct / 100)
     : p.realSellingPrice
+  // sugerido (3×) já com taxa embutida
+  const suggestedListingPrice = mktTier && commissionPct < 100
+    ? (suggestedPrice + fixedFee) / (1 - commissionPct / 100)
+    : suggestedPrice
   const rPct = (cfg.reinvestPct ?? 40) / 100
   const payPct = (cfg.paymentPct ?? 40) / 100
   const resPct = (cfg.reservePct ?? 20) / 100
-  return { totalCost, suggestedPrice, netProfit, marketplaceFee, commissionPct, listingPrice, reinvest: netProfit * rPct, payment: netProfit * payPct, reserve: netProfit * resPct }
+  return { totalCost, suggestedPrice, suggestedListingPrice, netProfit, marketplaceFee, commissionPct, listingPrice, reinvest: netProfit * rPct, payment: netProfit * payPct, reserve: netProfit * resPct }
 }
 
 function calcFailedCost(f: FailedPrint, filaments: Filament[], cfg: CostConfig) {
@@ -1207,8 +1211,8 @@ export default function Farm3D() {
                   </div>
                   <div className="col-span-2 sm:col-span-1">
                     <label className="block text-white/40 text-xs mb-1.5">Total recebido (R$)</label>
-                    <input type="number" step="0.01" min="0" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value }))} className={inputCls} />
-                    {previewCalc && <p className="text-yellow-400/80 text-xs mt-1">Sugerido: {fmt(previewCalc.suggestedPrice)}</p>}
+                    <input type="text" inputMode="decimal" placeholder="50,00" value={prodForm.realSellingPrice} onChange={(e) => setProdForm((p) => ({ ...p, realSellingPrice:e.target.value.replace(/[^0-9,\.]/g,'') }))} className={inputCls} />
+                    {previewCalc && <p className="text-yellow-400/80 text-xs mt-1">Sugerido: {fmt(previewCalc.suggestedListingPrice)}{previewCalc.commissionPct > 0 ? ` (c/ taxa ${prodForm.marketplace==='shopee'?'Shopee':'ML'})` : ''}</p>}
                   </div>
                   <div>
                     <label className="block text-white/40 text-xs mb-1.5">Canal de Venda</label>
@@ -1237,7 +1241,7 @@ export default function Farm3D() {
                     )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div><p className="text-white/35 text-xs mb-0.5">Custo Total</p><p className="text-white font-mono font-semibold">{fmt(previewCalc.totalCost)}</p></div>
-                      <div><p className="text-white/35 text-xs mb-0.5">Sugerido (3×)</p><p className="text-yellow-400 font-mono">{fmt(previewCalc.suggestedPrice)}</p></div>
+                      <div><p className="text-white/35 text-xs mb-0.5">{previewCalc.commissionPct > 0 ? `Sugerido c/ taxa` : 'Sugerido (3×)'}</p><p className="text-yellow-400 font-mono">{fmt(previewCalc.suggestedListingPrice)}</p></div>
                       <div><p className="text-white/35 text-xs mb-0.5">Lucro</p><p className={`font-mono font-semibold ${previewCalc.netProfit>=0?'text-emerald-400':'text-red-400'}`}>{fmt(previewCalc.netProfit)}</p></div>
                       <div><p className="text-white/35 text-xs mb-0.5">Seu Pagamento</p><p className="text-emerald-400/80 font-mono">{fmt(previewCalc.payment)}</p></div>
                     </div>
