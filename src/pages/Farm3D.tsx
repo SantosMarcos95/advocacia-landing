@@ -522,7 +522,8 @@ export default function Farm3D() {
   // ── Derived data ──────────────────────────────────────────────────────────
   const overdueTasks = tasks.filter((t) => taskStatus(t, config.printerTotalH).overdue)
   const dueSoonTasks = tasks.filter((t) => { const s = taskStatus(t, config.printerTotalH); return !s.overdue && (config.printerTotalH - t.lastDoneAtH) / t.intervalH > 0.85 })
-  const deliveredOrders = orders.filter((o) => o.status==='entregue').sort((a,b) => (b.orderDate||'').localeCompare(a.orderDate||''))
+  // exclui pedidos auto-criados pelas Vendas (já contados em products/totals)
+  const deliveredOrders = orders.filter((o) => o.status==='entregue' && !o.productId && o.clientName !== 'Venda direta').sort((a,b) => (b.orderDate||'').localeCompare(a.orderDate||''))
   const orderRevenue = (month?: string) => deliveredOrders.filter(o => !month || (o.orderDate||'').startsWith(month)).reduce((s,o) => s + o.unitPrice * o.quantity, 0)
   const thisMonth = currentMonth()
   const thisMonthGoal = goals.find((g) => g.month === thisMonth)
