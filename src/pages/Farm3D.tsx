@@ -1226,22 +1226,23 @@ export default function Farm3D() {
                 {previewCalc && (
                   <div className="mb-4 bg-dark-300/60 rounded-lg p-4 border border-gold/10">
                     {previewCalc.marketplaceFee > 0 && (
-                      <div className="mb-3 pb-3 border-b border-white/8 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${prodForm.marketplace==='shopee'?'text-orange-400 bg-orange-400/10 border-orange-400/30':'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'}`}>
-                            {prodForm.marketplace==='shopee'?'Shopee':'Mercado Livre'} {previewCalc.commissionPct}%
-                          </span>
-                          <span className="text-white/40 text-xs">Taxa: <span className="text-red-400 font-mono font-semibold">{fmt(previewCalc.marketplaceFee)}</span></span>
-                        </div>
-                        <div className="flex items-center gap-2 bg-emerald-400/5 border border-emerald-400/20 rounded px-3 py-2">
-                          <span className="text-white/50 text-xs">Para receber <span className="text-white font-mono font-semibold">{fmt(toNum(prodForm.realSellingPrice))}</span>, liste por:</span>
-                          <span className="text-emerald-400 font-mono font-bold text-sm ml-auto">{fmt(previewCalc.listingPrice)}</span>
-                        </div>
+                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/8">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${prodForm.marketplace==='shopee'?'text-orange-400 bg-orange-400/10 border-orange-400/30':'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'}`}>
+                          {prodForm.marketplace==='shopee'?'Shopee':'Mercado Livre'} {previewCalc.commissionPct}%
+                        </span>
+                        <span className="text-white/40 text-xs">Taxa: <span className="text-red-400 font-mono font-semibold">{fmt(previewCalc.marketplaceFee)}</span></span>
                       </div>
                     )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div><p className="text-white/35 text-xs mb-0.5">Custo Total</p><p className="text-white font-mono font-semibold">{fmt(previewCalc.totalCost)}</p></div>
-                      <div><p className="text-white/35 text-xs mb-0.5">{previewCalc.commissionPct > 0 ? `Sugerido c/ taxa` : 'Sugerido (3×)'}</p><p className="text-yellow-400 font-mono">{fmt(previewCalc.suggestedListingPrice)}</p></div>
+                      {previewCalc.commissionPct > 0
+                        ? <div className="bg-emerald-400/5 border border-emerald-400/20 rounded p-2">
+                            <p className="text-emerald-400/70 text-xs mb-0.5">Cobrar na {prodForm.marketplace==='shopee'?'Shopee':'ML'}</p>
+                            <p className="text-emerald-400 font-mono font-bold">{fmt(previewCalc.listingPrice)}</p>
+                            <p className="text-white/30 text-xs">para receber {fmt(toNum(prodForm.realSellingPrice))}</p>
+                          </div>
+                        : <div><p className="text-white/35 text-xs mb-0.5">Sugerido (3×)</p><p className="text-yellow-400 font-mono">{fmt(previewCalc.suggestedPrice)}</p></div>
+                      }
                       <div><p className="text-white/35 text-xs mb-0.5">Lucro</p><p className={`font-mono font-semibold ${previewCalc.netProfit>=0?'text-emerald-400':'text-red-400'}`}>{fmt(previewCalc.netProfit)}</p></div>
                       <div><p className="text-white/35 text-xs mb-0.5">Seu Pagamento</p><p className="text-emerald-400/80 font-mono">{fmt(previewCalc.payment)}</p></div>
                     </div>
