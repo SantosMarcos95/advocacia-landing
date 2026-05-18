@@ -194,6 +194,25 @@ const selectCls = 'w-full bg-dark border border-gold/20 rounded px-3 py-2 text-w
 
 type Tab = 'painel'|'pedidos'|'manutencao'|'filamentos'|'vendas'|'estoque'|'config'
 
+function TierInput({ value, onChange, className }: { value: number; onChange: (n: number) => void; className: string }) {
+  const [raw, setRaw] = useState(String(value).replace('.', ','))
+  useEffect(() => { setRaw(String(value).replace('.', ',')) }, [value])
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={raw}
+      onChange={(e) => setRaw(e.target.value.replace(/[^0-9,\.]/g, ''))}
+      onBlur={() => {
+        const n = parseFloat(raw.replace(',', '.')) || 0
+        onChange(n)
+        setRaw(String(n).replace('.', ','))
+      }}
+      className={className}
+    />
+  )
+}
+
 function Card({ label, value, sub, color='text-white' }: { label:string; value:string; sub?:string; color?:string }) {
   return (
     <div className="bg-dark-200 border border-gold/10 rounded-lg p-4">
@@ -1442,16 +1461,16 @@ export default function Farm3D() {
                       <div key={tier.id} className="bg-dark-300/40 border border-white/8 rounded p-2.5 space-y-1.5">
                         <div className="flex items-center gap-2">
                           <span className="text-white/30 text-xs flex-shrink-0">De R$</span>
-                          <input type="text" inputMode="decimal" value={tier.from} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, from:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <TierInput value={tier.from} onChange={(n) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, from:n} : t) }))} className={`flex-1 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">até R$</span>
-                          <input type="text" inputMode="decimal" value={tier.to} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, to:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <TierInput value={tier.to} onChange={(n) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, to:n} : t) }))} className={`flex-1 ${inputCls}`} />
                           {cfgForm.shopee.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, shopee: p.shopee.filter(t => t.id!==tier.id) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <input type="text" inputMode="decimal" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <TierInput value={tier.pct} onChange={(n) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, pct:n} : t) }))} className={`w-20 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">%</span>
                           <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
-                          <input type="text" inputMode="decimal" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <TierInput value={tier.fixedFee} onChange={(n) => setCfgForm(p => ({ ...p, shopee: p.shopee.map(t => t.id===tier.id ? {...t, fixedFee:n} : t) }))} className={`w-24 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
                         </div>
                       </div>
@@ -1470,16 +1489,16 @@ export default function Farm3D() {
                       <div key={tier.id} className="bg-dark-300/40 border border-white/8 rounded p-2.5 space-y-1.5">
                         <div className="flex items-center gap-2">
                           <span className="text-white/30 text-xs flex-shrink-0">De R$</span>
-                          <input type="text" inputMode="decimal" value={tier.from} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, from:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <TierInput value={tier.from} onChange={(n) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, from:n} : t) }))} className={`flex-1 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">até R$</span>
-                          <input type="text" inputMode="decimal" value={tier.to} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, to:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <TierInput value={tier.to} onChange={(n) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, to:n} : t) }))} className={`flex-1 ${inputCls}`} />
                           {cfgForm.mercadolivre.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.filter(t => t.id!==tier.id) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <input type="text" inputMode="decimal" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <TierInput value={tier.pct} onChange={(n) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, pct:n} : t) }))} className={`w-20 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">%</span>
                           <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
-                          <input type="text" inputMode="decimal" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <TierInput value={tier.fixedFee} onChange={(n) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map(t => t.id===tier.id ? {...t, fixedFee:n} : t) }))} className={`w-24 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
                         </div>
                       </div>
