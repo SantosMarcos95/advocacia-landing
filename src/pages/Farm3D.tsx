@@ -1288,7 +1288,15 @@ export default function Farm3D() {
                           <td className="px-3 py-3 text-white/60 font-mono">{p.printTimeH}h</td>
                           <td className="px-3 py-3 text-white font-mono">{fmt(c.totalCost)}</td>
                           <td className="px-3 py-3 text-yellow-400/80 font-mono">{fmt(c.suggestedPrice)}</td>
-                          <td className="px-3 py-3 text-white font-mono">{fmt(p.realSellingPrice)}</td>
+                          <td className="px-3 py-3">
+                            <p className="text-white font-mono">{fmt(p.realSellingPrice)}</p>
+                            {c.marketplaceFee > 0 && (
+                              <>
+                                <p className="text-red-400/70 font-mono text-xs">-{fmt(c.marketplaceFee)} <span className="text-white/30">{p.marketplace==='shopee'?'Shopee':'ML'}</span></p>
+                                <p className="text-emerald-400/80 font-mono text-xs">{fmt(p.realSellingPrice - c.marketplaceFee)}</p>
+                              </>
+                            )}
+                          </td>
                           <td className={`px-3 py-3 font-mono font-semibold ${c.netProfit>=0?'text-emerald-400':'text-red-400'}`}>{fmt(c.netProfit)}</td>
                           <td className="px-3 py-3 text-blue-400/70 font-mono">{fmt(c.reinvest)}</td>
                           <td className="px-3 py-3 text-emerald-400/70 font-mono">{fmt(c.payment)}</td>
