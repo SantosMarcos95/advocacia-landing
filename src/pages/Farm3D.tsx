@@ -160,12 +160,17 @@ function calcProduct(p: Product, filaments: Filament[], cfg: CostConfig) {
   const suggestedPrice = totalCost * 3
   const mktTier = p.marketplace === 'shopee' ? getMarketplaceTier(p.realSellingPrice, cfg.shopee) : p.marketplace === 'mercadolivre' ? getMarketplaceTier(p.realSellingPrice, cfg.mercadolivre) : null
   const commissionPct = mktTier?.pct ?? 0
-  const marketplaceFee = p.realSellingPrice * (commissionPct / 100) + (mktTier?.fixedFee ?? 0)
+  const fixedFee = mktTier?.fixedFee ?? 0
+  const marketplaceFee = p.realSellingPrice * (commissionPct / 100) + fixedFee
   const netProfit = p.realSellingPrice - marketplaceFee - totalCost
+  // preço que precisa cobrar para receber exatamente realSellingPrice líquido
+  const listingPrice = mktTier && commissionPct < 100
+    ? (p.realSellingPrice + fixedFee) / (1 - commissionPct / 100)
+    : p.realSellingPrice
   const rPct = (cfg.reinvestPct ?? 40) / 100
   const payPct = (cfg.paymentPct ?? 40) / 100
   const resPct = (cfg.reservePct ?? 20) / 100
-  return { totalCost, suggestedPrice, netProfit, marketplaceFee, commissionPct, reinvest: netProfit * rPct, payment: netProfit * payPct, reserve: netProfit * resPct }
+  return { totalCost, suggestedPrice, netProfit, marketplaceFee, commissionPct, listingPrice, reinvest: netProfit * rPct, payment: netProfit * payPct, reserve: netProfit * resPct }
 }
 
 function calcFailedCost(f: FailedPrint, filaments: Filament[], cfg: CostConfig) {
@@ -1217,11 +1222,17 @@ export default function Farm3D() {
                 {previewCalc && (
                   <div className="mb-4 bg-dark-300/60 rounded-lg p-4 border border-gold/10">
                     {previewCalc.marketplaceFee > 0 && (
-                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/8">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${prodForm.marketplace==='shopee'?'text-orange-400 bg-orange-400/10 border-orange-400/30':'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'}`}>
-                          {prodForm.marketplace==='shopee'?'Shopee':'Mercado Livre'} {previewCalc.commissionPct}%
-                        </span>
-                        <span className="text-white/40 text-xs">Taxa: <span className="text-red-400 font-mono font-semibold">{fmt(previewCalc.marketplaceFee)}</span></span>
+                      <div className="mb-3 pb-3 border-b border-white/8 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${prodForm.marketplace==='shopee'?'text-orange-400 bg-orange-400/10 border-orange-400/30':'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'}`}>
+                            {prodForm.marketplace==='shopee'?'Shopee':'Mercado Livre'} {previewCalc.commissionPct}%
+                          </span>
+                          <span className="text-white/40 text-xs">Taxa: <span className="text-red-400 font-mono font-semibold">{fmt(previewCalc.marketplaceFee)}</span></span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-emerald-400/5 border border-emerald-400/20 rounded px-3 py-2">
+                          <span className="text-white/50 text-xs">Para receber <span className="text-white font-mono font-semibold">{fmt(toNum(prodForm.realSellingPrice))}</span>, liste por:</span>
+                          <span className="text-emerald-400 font-mono font-bold text-sm ml-auto">{fmt(previewCalc.listingPrice)}</span>
+                        </div>
                       </div>
                     )}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
