@@ -519,9 +519,11 @@ export default function Farm3D() {
   // ── Derived data ──────────────────────────────────────────────────────────
   const overdueTasks = tasks.filter((t) => taskStatus(t, config.printerTotalH).overdue)
   const dueSoonTasks = tasks.filter((t) => { const s = taskStatus(t, config.printerTotalH); return !s.overdue && (config.printerTotalH - t.lastDoneAtH) / t.intervalH > 0.85 })
+  const deliveredOrders = orders.filter((o) => o.status==='entregue').sort((a,b) => (b.orderDate||'').localeCompare(a.orderDate||''))
+  const orderRevenue = (month?: string) => deliveredOrders.filter(o => !month || (o.orderDate||'').startsWith(month)).reduce((s,o) => s + o.unitPrice * o.quantity, 0)
   const thisMonth = currentMonth()
   const thisMonthGoal = goals.find((g) => g.month === thisMonth)
-  const monthRevenue = getMonthRevenue(thisMonth, products)
+  const monthRevenue = getMonthRevenue(thisMonth, products) + orderRevenue(thisMonth)
   const goalPct = thisMonthGoal ? Math.min((monthRevenue / thisMonthGoal.target) * 100, 100) : 0
   const totals = products.reduce((acc, p) => {
     const c = calcProduct(p, filaments, config)
@@ -548,6 +550,7 @@ export default function Farm3D() {
   const allMonths = [...new Set([
     ...goals.map((g) => g.month),
     ...products.map((p) => (p.saleDate||'').slice(0,7)).filter(Boolean),
+    ...deliveredOrders.map((o) => (o.orderDate||'').slice(0,7)).filter(Boolean),
   ])].sort().reverse()
 
   const totalPct = cfgForm.reinvestPct + cfgForm.paymentPct + cfgForm.reservePct
@@ -690,7 +693,7 @@ export default function Farm3D() {
                     <tbody>
                       {allMonths.map((m, i) => {
                         const g = goals.find((x) => x.month===m)
-                        const rev = getMonthRevenue(m, products)
+                        const rev = getMonthRevenue(m, products) + orderRevenue(m)
                         const pct = g && g.target > 0 ? (rev/g.target)*100 : null
                         const monthProfit = products.filter((p) => (p.saleDate||'').startsWith(m)).reduce((s, p) => s+calcProduct(p,filaments,config).netProfit, 0)
                         return (
@@ -763,13 +766,61 @@ export default function Farm3D() {
               </section>
             )}
 
-            {/* Resumo financeiro */}
+            {/* Vendas diretas recentes */}
             {products.length > 0 && (
+              <section>
+                <h3 className="text-white/50 text-xs uppercase tracking-wider mb-3 flex items-center gap-2"><DollarSign size={13} /> Vendas Diretas ({products.length})</h3>
+                <div className="bg-dark-200 border border-gold/10 rounded-lg overflow-hidden">
+                  {products.slice().sort((a,b) => (b.saleDate||'').localeCompare(a.saleDate||'')).slice(0,5).map((p, i, arr) => {
+                    const c = calcProduct(p, filaments, config)
+                    return (
+                      <div key={p.id} className={`flex items-center justify-between px-4 py-3 ${i < arr.length-1 ? 'border-b border-gold/5' : ''}`}>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white text-sm font-medium">{p.name}</span>
+                            {p.marketplace==='shopee' && <span className="text-xs px-1.5 py-0.5 rounded border text-orange-400 bg-orange-400/10 border-orange-400/30">Shopee</span>}
+                            {p.marketplace==='mercadolivre' && <span className="text-xs px-1.5 py-0.5 rounded border text-yellow-400 bg-yellow-400/10 border-yellow-400/30">ML</span>}
+                          </div>
+                          <p className="text-white/35 text-xs mt-0.5">{p.saleDate||'—'} · {p.quantity} un.</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white font-mono text-sm">{fmt(p.realSellingPrice)}</p>
+                          <p className={`font-mono text-xs ${c.netProfit>=0?'text-emerald-400/70':'text-red-400/70'}`}>lucro {fmt(c.netProfit)}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {products.length > 5 && <button onClick={() => setTab('vendas')} className="w-full py-2 text-gold/50 hover:text-gold text-xs transition-colors">+ {products.length-5} mais → ver todas</button>}
+                </div>
+              </section>
+            )}
+
+            {/* Pedidos entregues */}
+            {deliveredOrders.length > 0 && (
+              <section>
+                <h3 className="text-white/50 text-xs uppercase tracking-wider mb-3 flex items-center gap-2"><ShoppingCart size={13} /> Pedidos Entregues ({deliveredOrders.length})</h3>
+                <div className="bg-dark-200 border border-gold/10 rounded-lg overflow-hidden">
+                  {deliveredOrders.slice(0,5).map((o, i, arr) => (
+                    <div key={o.id} className={`flex items-center justify-between px-4 py-3 ${i < arr.length-1 ? 'border-b border-gold/5' : ''}`}>
+                      <div>
+                        <p className="text-white text-sm font-medium">{o.clientName} — {o.productName} ×{o.quantity}</p>
+                        <p className="text-white/35 text-xs mt-0.5">{o.orderDate||'—'}{o.paid ? ' · pago' : ' · não pago'}</p>
+                      </div>
+                      <p className="text-emerald-400 font-mono text-sm">{fmt(o.unitPrice * o.quantity)}</p>
+                    </div>
+                  ))}
+                  {deliveredOrders.length > 5 && <button onClick={() => setTab('pedidos')} className="w-full py-2 text-gold/50 hover:text-gold text-xs transition-colors">+ {deliveredOrders.length-5} mais → ver todos</button>}
+                </div>
+              </section>
+            )}
+
+            {/* Resumo financeiro */}
+            {(products.length > 0 || deliveredOrders.length > 0) && (
               <>
                 <section>
                   <h3 className="text-white/50 text-xs uppercase tracking-wider mb-3 flex items-center gap-2"><DollarSign size={13} /> Resumo Financeiro (Geral)</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Card label="Receita Total" value={fmt(totals.revenue)} sub={`${totals.pieces} peças`} />
+                    <Card label="Receita Total" value={fmt(totals.revenue + orderRevenue())} sub={`${totals.pieces} peças · ${deliveredOrders.length} pedidos`} />
                     <Card label="Custo Total" value={fmt(totals.cost)} color="text-white/70" />
                     <Card label="Lucro Líquido" value={fmt(totals.profit)} color={totals.profit>=0?'text-emerald-400':'text-red-400'} />
                     <Card label="Falhas este mês" value={fmt(failsCost)} sub={`${thisMonthFails.length} falhas`} color="text-red-400/70" />
