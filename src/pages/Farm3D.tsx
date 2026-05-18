@@ -49,7 +49,7 @@ interface Order {
   productName: string; quantity: number; unitPrice: number
   status: 'recebido'|'fabricando'|'pronto'|'entregue'|'cancelado'
   paid: boolean; orderDate: string; dueDate: string; notes: string
-  stockItemId?: string
+  stockItemId?: string; productId?: string
 }
 interface MonthlyGoal { month: string; target: number }
 interface StockItem {
@@ -385,7 +385,7 @@ export default function Farm3D() {
     // Sempre cria pedido para novas vendas (manual ou de estoque)
     if (isNew) {
       const qty = toNum(prodForm.quantity)
-      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'recebido', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
+      const o: Order = { id:uid(), clientName:'Venda direta', clientContact:'', productName:prod.name, quantity:qty, unitPrice: qty > 0 ? prod.realSellingPrice / qty : prod.realSellingPrice, status:'recebido', paid:false, orderDate:prod.saleDate, dueDate:prod.saleDate, notes:'', productId:prod.id, ...(prodForm.stockItemId ? { stockItemId:prodForm.stockItemId } : {}) }
       setOrders((p) => [o, ...p])
       try { await setDoc(doc(db, COL.orders, o.id), o) } catch (e) { console.error('Erro ao salvar pedido:', e) }
     }
@@ -394,6 +394,9 @@ export default function Farm3D() {
   async function deleteProd(id: string) {
     setProducts((p) => p.filter((x) => x.id !== id))
     await deleteDoc(doc(db, COL.products, id))
+    const linked = orders.filter((o) => o.productId === id)
+    setOrders((p) => p.filter((o) => o.productId !== id))
+    await Promise.all(linked.map((o) => deleteDoc(doc(db, COL.orders, o.id))))
   }
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
