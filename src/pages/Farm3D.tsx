@@ -1448,10 +1448,10 @@ export default function Farm3D() {
                           {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, shopee: p.shopee.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <input type="number" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">%</span>
                           <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
-                          <input type="number" min="0" step="0.01" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <input type="number" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
                         </div>
                       </div>
@@ -1481,10 +1481,10 @@ export default function Farm3D() {
                           {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <input type="number" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">%</span>
                           <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
-                          <input type="number" min="0" step="0.01" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <input type="number" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
                           <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
                         </div>
                       </div>
