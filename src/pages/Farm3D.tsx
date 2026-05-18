@@ -18,7 +18,7 @@ interface Filament {
   id: string; name: string; color: string; pricePerKg: number
   stockG: number; material: string; nozzleTempC: number; bedTempC: number
 }
-interface MarketplaceTier { upTo: number; pct: number; fixedFee?: number } // upTo=0 → acima de tudo (catch-all)
+interface MarketplaceTier { from: number; to: number; pct: number; fixedFee: number } // to=0 → acima de tudo (catch-all)
 interface CostConfig {
   electricityKwh: number; printerWatts: number
   depreciationPerHour: number; printerTotalH: number
@@ -72,8 +72,8 @@ const monthLabel = (m: string) => { const [y, mo] = m.split('-'); return `${['Ja
 const DEFAULT_CONFIG: CostConfig = {
   electricityKwh: 0.38, printerWatts: 500, depreciationPerHour: 1.0,
   printerTotalH: 0, reinvestPct: 40, paymentPct: 40, reservePct: 20,
-  shopee: [{ upTo: 0, pct: 14 }],
-  mercadolivre: [{ upTo: 0, pct: 16 }],
+  shopee: [{ from: 0, to: 0, pct: 14, fixedFee: 0 }],
+  mercadolivre: [{ from: 0, to: 0, pct: 16, fixedFee: 0 }],
 }
 
 const MATERIALS: Record<string, { nozzleTempC: number; bedTempC: number }> = {
@@ -127,14 +127,18 @@ const CFG_DOC = () => doc(db, 'farm3d_config', 'main')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function migrateTiers(raw: Record<string, unknown>[]): MarketplaceTier[] {
+  if (raw.length === 0) return []
+  if ('from' in raw[0]) return raw as unknown as MarketplaceTier[]
+  // formato antigo: { upTo, pct, fixedFee? }
+  const sorted = [...raw].sort((a: any, b: any) => (a.upTo === 0 ? 1 : b.upTo === 0 ? -1 : a.upTo - b.upTo))
+  return sorted.map((t: any, i: number) => ({ from: i === 0 ? 0 : (sorted[i - 1] as any).upTo, to: t.upTo, pct: t.pct, fixedFee: t.fixedFee ?? 0 }))
+}
+
 function getMarketplaceTier(price: number, tiers: MarketplaceTier[] | undefined): MarketplaceTier | null {
   if (!tiers || tiers.length === 0) return null
-  const sorted = [...tiers].sort((a, b) => {
-    if (a.upTo === 0) return 1
-    if (b.upTo === 0) return -1
-    return a.upTo - b.upTo
-  })
-  return sorted.find(t => t.upTo === 0 || price <= t.upTo) ?? sorted[sorted.length - 1]
+  const sorted = [...tiers].sort((a, b) => (a.to === 0 ? 1 : b.to === 0 ? -1 : a.to - b.to))
+  return sorted.find(t => t.to === 0 || price <= t.to) ?? sorted[sorted.length - 1]
 }
 
 function getFilamentEntries(item: { filaments?: FilamentEntry[]; filamentId?: string; weightPerPieceG?: number }): FilamentEntry[] {
@@ -296,8 +300,8 @@ export default function Farm3D() {
       if (cfgSnap.exists()) {
         const raw = cfgSnap.data() as Record<string, unknown>
         // migração: config antiga usava shopeePct/mercadoLivrePct flat
-        const shopee = Array.isArray(raw.shopee) ? raw.shopee as MarketplaceTier[] : [{ upTo: 0, pct: (raw.shopeePct as number) ?? 14 }]
-        const mercadolivre = Array.isArray(raw.mercadolivre) ? raw.mercadolivre as MarketplaceTier[] : [{ upTo: 0, pct: (raw.mercadoLivrePct as number) ?? 16 }]
+        const shopee = Array.isArray(raw.shopee) ? migrateTiers(raw.shopee as Record<string,unknown>[]) : [{ from: 0, to: 0, pct: (raw.shopeePct as number) ?? 14, fixedFee: 0 }]
+        const mercadolivre = Array.isArray(raw.mercadolivre) ? migrateTiers(raw.mercadolivre as Record<string,unknown>[]) : [{ from: 0, to: 0, pct: (raw.mercadoLivrePct as number) ?? 16, fixedFee: 0 }]
         const saved = { ...DEFAULT_CONFIG, ...raw, shopee, mercadolivre } as CostConfig
         setConfig(saved)
         setCfgForm(saved)
@@ -1433,27 +1437,34 @@ export default function Farm3D() {
                 {/* Shopee */}
                 <div>
                   <p className="text-orange-400/80 text-xs font-semibold mb-2">Shopee</p>
-                  <div className="space-y-1.5">
-                    {(cfgForm.shopee ?? []).sort((a,b) => a.upTo===0?1:b.upTo===0?-1:a.upTo-b.upTo).map((tier, idx, arr) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="text-white/30 text-xs w-14 flex-shrink-0">Até R$</span>
-                        {tier.upTo === 0
-                          ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
-                          : <input type="number" min="0" step="1" value={tier.upTo} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, upTo:parseFloat(e.target.value)||0} : t) }))} className={inputCls} />
-                        }
-                        <span className="text-white/30 text-xs flex-shrink-0">→</span>
-                        <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
-                        <span className="text-white/30 text-xs flex-shrink-0">%</span>
-                        <span className="text-white/30 text-xs flex-shrink-0">+ R$</span>
-                        <input type="number" min="0" step="0.01" value={tier.fixedFee ?? 0} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
-                        {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, shopee: p.shopee.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                  <div className="space-y-2">
+                    {(cfgForm.shopee ?? []).sort((a,b) => a.to===0?1:b.to===0?-1:a.to-b.to).map((tier, idx, arr) => (
+                      <div key={idx} className="bg-dark-300/40 border border-white/8 rounded p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/30 text-xs flex-shrink-0">De R$</span>
+                          <input type="number" min="0" step="1" value={tier.from} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, from:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">até R$</span>
+                          {tier.to === 0
+                            ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
+                            : <input type="number" min="0" step="1" value={tier.to} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, to:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          }
+                          {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, shopee: p.shopee.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">%</span>
+                          <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
+                          <input type="number" min="0" step="0.01" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
+                        </div>
                       </div>
                     ))}
                   </div>
                   <button type="button" onClick={() => setCfgForm(p => {
-                    const nonZero = (p.shopee ?? []).filter(t => t.upTo !== 0)
-                    const maxUpTo = nonZero.length > 0 ? Math.max(...nonZero.map(t => t.upTo)) : 50
-                    return { ...p, shopee: [...nonZero, { upTo: maxUpTo + 50, pct: 0 }, ...(p.shopee ?? []).filter(t => t.upTo === 0)] }
+                    const nonCatchAll = (p.shopee ?? []).filter(t => t.to !== 0)
+                    const maxTo = nonCatchAll.length > 0 ? Math.max(...nonCatchAll.map(t => t.to)) : 50
+                    const catchAll = (p.shopee ?? []).filter(t => t.to === 0)
+                    return { ...p, shopee: [...nonCatchAll, { from: maxTo, to: maxTo + 50, pct: 0, fixedFee: 0 }, ...catchAll] }
                   })} className="mt-2 flex items-center gap-1 text-xs text-orange-400/60 hover:text-orange-400 transition-colors">
                     <Plus size={11}/> Adicionar faixa
                   </button>
@@ -1462,27 +1473,34 @@ export default function Farm3D() {
                 {/* Mercado Livre */}
                 <div>
                   <p className="text-yellow-400/80 text-xs font-semibold mb-2">Mercado Livre</p>
-                  <div className="space-y-1.5">
-                    {(cfgForm.mercadolivre ?? []).sort((a,b) => a.upTo===0?1:b.upTo===0?-1:a.upTo-b.upTo).map((tier, idx, arr) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="text-white/30 text-xs w-14 flex-shrink-0">Até R$</span>
-                        {tier.upTo === 0
-                          ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
-                          : <input type="number" min="0" step="1" value={tier.upTo} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, upTo:parseFloat(e.target.value)||0} : t) }))} className={inputCls} />
-                        }
-                        <span className="text-white/30 text-xs flex-shrink-0">→</span>
-                        <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
-                        <span className="text-white/30 text-xs flex-shrink-0">%</span>
-                        <span className="text-white/30 text-xs flex-shrink-0">+ R$</span>
-                        <input type="number" min="0" step="0.01" value={tier.fixedFee ?? 0} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
-                        {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                  <div className="space-y-2">
+                    {(cfgForm.mercadolivre ?? []).sort((a,b) => a.to===0?1:b.to===0?-1:a.to-b.to).map((tier, idx, arr) => (
+                      <div key={idx} className="bg-dark-300/40 border border-white/8 rounded p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/30 text-xs flex-shrink-0">De R$</span>
+                          <input type="number" min="0" step="1" value={tier.from} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, from:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">até R$</span>
+                          {tier.to === 0
+                            ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
+                            : <input type="number" min="0" step="1" value={tier.to} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, to:parseFloat(e.target.value)||0} : t) }))} className={`flex-1 ${inputCls}`} />
+                          }
+                          {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">%</span>
+                          <span className="text-white/30 text-xs flex-shrink-0 ml-2">+ R$</span>
+                          <input type="number" min="0" step="0.01" value={tier.fixedFee} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, fixedFee:parseFloat(e.target.value)||0} : t) }))} className={`w-24 ${inputCls}`} />
+                          <span className="text-white/30 text-xs flex-shrink-0">fixo/item</span>
+                        </div>
                       </div>
                     ))}
                   </div>
                   <button type="button" onClick={() => setCfgForm(p => {
-                    const nonZero = (p.mercadolivre ?? []).filter(t => t.upTo !== 0)
-                    const maxUpTo = nonZero.length > 0 ? Math.max(...nonZero.map(t => t.upTo)) : 50
-                    return { ...p, mercadolivre: [...nonZero, { upTo: maxUpTo + 50, pct: 0 }, ...(p.mercadolivre ?? []).filter(t => t.upTo === 0)] }
+                    const nonCatchAll = (p.mercadolivre ?? []).filter(t => t.to !== 0)
+                    const maxTo = nonCatchAll.length > 0 ? Math.max(...nonCatchAll.map(t => t.to)) : 50
+                    const catchAll = (p.mercadolivre ?? []).filter(t => t.to === 0)
+                    return { ...p, mercadolivre: [...nonCatchAll, { from: maxTo, to: maxTo + 50, pct: 0, fixedFee: 0 }, ...catchAll] }
                   })} className="mt-2 flex items-center gap-1 text-xs text-yellow-400/60 hover:text-yellow-400 transition-colors">
                     <Plus size={11}/> Adicionar faixa
                   </button>
