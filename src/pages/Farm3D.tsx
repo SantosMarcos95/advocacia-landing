@@ -18,11 +18,12 @@ interface Filament {
   id: string; name: string; color: string; pricePerKg: number
   stockG: number; material: string; nozzleTempC: number; bedTempC: number
 }
+interface MarketplaceTier { upTo: number; pct: number } // upTo=0 → acima de tudo (catch-all)
 interface CostConfig {
   electricityKwh: number; printerWatts: number
   depreciationPerHour: number; printerTotalH: number
   reinvestPct: number; paymentPct: number; reservePct: number
-  shopeePct: number; mercadoLivrePct: number
+  shopee: MarketplaceTier[]; mercadolivre: MarketplaceTier[]
 }
 interface FilamentEntry { filamentId: string; weightG: number }
 interface Product {
@@ -71,7 +72,8 @@ const monthLabel = (m: string) => { const [y, mo] = m.split('-'); return `${['Ja
 const DEFAULT_CONFIG: CostConfig = {
   electricityKwh: 0.38, printerWatts: 500, depreciationPerHour: 1.0,
   printerTotalH: 0, reinvestPct: 40, paymentPct: 40, reservePct: 20,
-  shopeePct: 14, mercadoLivrePct: 16,
+  shopee: [{ upTo: 0, pct: 14 }],
+  mercadolivre: [{ upTo: 0, pct: 16 }],
 }
 
 const MATERIALS: Record<string, { nozzleTempC: number; bedTempC: number }> = {
@@ -125,6 +127,16 @@ const CFG_DOC = () => doc(db, 'farm3d_config', 'main')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function getMarketplaceRate(price: number, tiers: MarketplaceTier[] | undefined): number {
+  if (!tiers || tiers.length === 0) return 0
+  const sorted = [...tiers].sort((a, b) => {
+    if (a.upTo === 0) return 1
+    if (b.upTo === 0) return -1
+    return a.upTo - b.upTo
+  })
+  return (sorted.find(t => t.upTo === 0 || price <= t.upTo) ?? sorted[sorted.length - 1]).pct
+}
+
 function getFilamentEntries(item: { filaments?: FilamentEntry[]; filamentId?: string; weightPerPieceG?: number }): FilamentEntry[] {
   if (item.filaments && item.filaments.length > 0) return item.filaments
   if (item.filamentId) return [{ filamentId: item.filamentId, weightG: item.weightPerPieceG || 0 }]
@@ -142,7 +154,7 @@ function calcProduct(p: Product, filaments: Filament[], cfg: CostConfig) {
   const costPerPiece = filCostPerPiece + p.printTimeH * machineH
   const totalCost = costPerPiece * p.quantity
   const suggestedPrice = totalCost * 3
-  const commissionPct = p.marketplace === 'shopee' ? (cfg.shopeePct ?? 14) : p.marketplace === 'mercadolivre' ? (cfg.mercadoLivrePct ?? 16) : 0
+  const commissionPct = p.marketplace === 'shopee' ? getMarketplaceRate(p.realSellingPrice, cfg.shopee) : p.marketplace === 'mercadolivre' ? getMarketplaceRate(p.realSellingPrice, cfg.mercadolivre) : 0
   const marketplaceFee = p.realSellingPrice * (commissionPct / 100)
   const netProfit = p.realSellingPrice - marketplaceFee - totalCost
   const rPct = (cfg.reinvestPct ?? 40) / 100
@@ -281,7 +293,11 @@ export default function Farm3D() {
       }
 
       if (cfgSnap.exists()) {
-        const saved = { ...DEFAULT_CONFIG, ...cfgSnap.data() } as CostConfig
+        const raw = cfgSnap.data() as Record<string, unknown>
+        // migração: config antiga usava shopeePct/mercadoLivrePct flat
+        const shopee = Array.isArray(raw.shopee) ? raw.shopee as MarketplaceTier[] : [{ upTo: 0, pct: (raw.shopeePct as number) ?? 14 }]
+        const mercadolivre = Array.isArray(raw.mercadolivre) ? raw.mercadolivre as MarketplaceTier[] : [{ upTo: 0, pct: (raw.mercadoLivrePct as number) ?? 16 }]
+        const saved = { ...DEFAULT_CONFIG, ...raw, shopee, mercadolivre } as CostConfig
         setConfig(saved)
         setCfgForm(saved)
       }
@@ -1169,8 +1185,8 @@ export default function Farm3D() {
                     <label className="block text-white/40 text-xs mb-1.5">Canal de Venda</label>
                     <select value={prodForm.marketplace} onChange={(e) => setProdForm((p) => ({ ...p, marketplace:e.target.value }))} className={selectCls}>
                       <option value="">— Venda direta —</option>
-                      <option value="shopee">Shopee ({config.shopeePct ?? 14}%)</option>
-                      <option value="mercadolivre">Mercado Livre ({config.mercadoLivrePct ?? 16}%)</option>
+                      <option value="shopee">Shopee</option>
+                      <option value="mercadolivre">Mercado Livre</option>
                     </select>
                   </div>
                 </div>
@@ -1409,19 +1425,62 @@ export default function Farm3D() {
                 {!pctValid && <p className="text-red-400/70 text-xs mt-2">A soma das porcentagens precisa ser exatamente 100%.</p>}
               </div>
 
-              <div className="border-t border-gold/10 pt-5">
-                <p className="text-white/50 text-xs uppercase tracking-wider mb-4">Taxas de Marketplace</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-orange-400/70 text-xs mb-1.5">Shopee (%)</label>
-                    <input type="number" step="0.5" min="0" max="100" value={cfgForm.shopeePct ?? 14} onChange={(e) => setCfgForm((p) => ({ ...p, shopeePct:parseFloat(e.target.value)||0 }))} className={inputCls} />
-                    <p className="text-white/25 text-xs mt-1">Comissão cobrada pela Shopee</p>
+              <div className="border-t border-gold/10 pt-5 space-y-5">
+                <p className="text-white/50 text-xs uppercase tracking-wider">Taxas de Marketplace por Faixa de Preço</p>
+                <p className="text-white/30 text-xs -mt-3">Configure faixas de preço e a taxa correspondente. A última faixa "Acima" é aplicada a qualquer valor maior.</p>
+
+                {/* Shopee */}
+                <div>
+                  <p className="text-orange-400/80 text-xs font-semibold mb-2">Shopee</p>
+                  <div className="space-y-1.5">
+                    {(cfgForm.shopee ?? []).sort((a,b) => a.upTo===0?1:b.upTo===0?-1:a.upTo-b.upTo).map((tier, idx, arr) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-white/30 text-xs w-14 flex-shrink-0">Até R$</span>
+                        {tier.upTo === 0
+                          ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
+                          : <input type="number" min="0" step="1" value={tier.upTo} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, upTo:parseFloat(e.target.value)||0} : t) }))} className={inputCls} />
+                        }
+                        <span className="text-white/30 text-xs flex-shrink-0">→</span>
+                        <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, shopee: p.shopee.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                        <span className="text-white/30 text-xs flex-shrink-0">%</span>
+                        {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, shopee: p.shopee.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <label className="block text-yellow-400/70 text-xs mb-1.5">Mercado Livre (%)</label>
-                    <input type="number" step="0.5" min="0" max="100" value={cfgForm.mercadoLivrePct ?? 16} onChange={(e) => setCfgForm((p) => ({ ...p, mercadoLivrePct:parseFloat(e.target.value)||0 }))} className={inputCls} />
-                    <p className="text-white/25 text-xs mt-1">Comissão cobrada pelo ML</p>
+                  <button type="button" onClick={() => setCfgForm(p => {
+                    const nonZero = (p.shopee ?? []).filter(t => t.upTo !== 0)
+                    const maxUpTo = nonZero.length > 0 ? Math.max(...nonZero.map(t => t.upTo)) : 50
+                    return { ...p, shopee: [...nonZero, { upTo: maxUpTo + 50, pct: 0 }, ...(p.shopee ?? []).filter(t => t.upTo === 0)] }
+                  })} className="mt-2 flex items-center gap-1 text-xs text-orange-400/60 hover:text-orange-400 transition-colors">
+                    <Plus size={11}/> Adicionar faixa
+                  </button>
+                </div>
+
+                {/* Mercado Livre */}
+                <div>
+                  <p className="text-yellow-400/80 text-xs font-semibold mb-2">Mercado Livre</p>
+                  <div className="space-y-1.5">
+                    {(cfgForm.mercadolivre ?? []).sort((a,b) => a.upTo===0?1:b.upTo===0?-1:a.upTo-b.upTo).map((tier, idx, arr) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-white/30 text-xs w-14 flex-shrink-0">Até R$</span>
+                        {tier.upTo === 0
+                          ? <span className="flex-1 px-3 py-2 bg-dark-300/50 border border-white/8 rounded text-white/40 text-sm">Acima</span>
+                          : <input type="number" min="0" step="1" value={tier.upTo} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, upTo:parseFloat(e.target.value)||0} : t) }))} className={inputCls} />
+                        }
+                        <span className="text-white/30 text-xs flex-shrink-0">→</span>
+                        <input type="number" min="0" max="100" step="0.5" value={tier.pct} onChange={(e) => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.map((t,i) => i===idx ? {...t, pct:parseFloat(e.target.value)||0} : t) }))} className={`w-20 ${inputCls}`} />
+                        <span className="text-white/30 text-xs flex-shrink-0">%</span>
+                        {arr.length > 1 && <button type="button" onClick={() => setCfgForm(p => ({ ...p, mercadolivre: p.mercadolivre.filter((_,i) => i!==idx) }))} className="text-white/25 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 size={13}/></button>}
+                      </div>
+                    ))}
                   </div>
+                  <button type="button" onClick={() => setCfgForm(p => {
+                    const nonZero = (p.mercadolivre ?? []).filter(t => t.upTo !== 0)
+                    const maxUpTo = nonZero.length > 0 ? Math.max(...nonZero.map(t => t.upTo)) : 50
+                    return { ...p, mercadolivre: [...nonZero, { upTo: maxUpTo + 50, pct: 0 }, ...(p.mercadolivre ?? []).filter(t => t.upTo === 0)] }
+                  })} className="mt-2 flex items-center gap-1 text-xs text-yellow-400/60 hover:text-yellow-400 transition-colors">
+                    <Plus size={11}/> Adicionar faixa
+                  </button>
                 </div>
               </div>
 
