@@ -21,6 +21,7 @@ interface Recebivel {
   valor: number
   dataVencimento: string
   status: 'pendente' | 'recebido'
+  recorrente: boolean
   observacoes: string
   criadoEm: number
 }
@@ -200,11 +201,12 @@ function SummaryCard({ title, value, color, icon, subtitle }: {
 // ─── Recebivel Modal ──────────────────────────────────────────────────────────
 
 function RecebivelModal({
-  initial, onSave, onClose,
+  initial, onSave, onClose, error,
 }: {
   initial: Partial<Recebivel>
-  onSave: (d: Partial<Recebivel>) => void
+  onSave: (d: Partial<Recebivel>, repeticoes: number) => void
   onClose: () => void
+  error?: string
 }) {
   const [form, setForm] = useState({
     clienteName: initial.clienteName ?? '',
@@ -212,14 +214,19 @@ function RecebivelModal({
     valor: initial.valor != null ? String(initial.valor) : '',
     dataVencimento: initial.dataVencimento ?? '',
     status: (initial.status ?? 'pendente') as 'pendente' | 'recebido',
+    recorrente: initial.recorrente ?? false,
     observacoes: initial.observacoes ?? '',
   })
+  const [repeticoes, setRepeticoes] = useState(2)
+
+  const isNew = !initial.id
+  const valorNum = parseFloat(form.valor.replace(',', '.'))
+  const valorPorMes = !isNaN(valorNum) && repeticoes > 1 ? valorNum / repeticoes : valorNum
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    const valorNum = parseFloat(form.valor.replace(',', '.'))
     if (isNaN(valorNum) || valorNum <= 0) return
-    onSave({ ...initial, ...form, valor: valorNum })
+    onSave({ ...initial, ...form, valor: valorNum }, form.recorrente && isNew ? repeticoes : 1)
   }
 
   return (
@@ -234,8 +241,8 @@ function RecebivelModal({
         <form onSubmit={submit} className="space-y-3">
           <Field label="Cliente / Credor" value={form.clienteName} onChange={v => setForm(f => ({ ...f, clienteName: v }))} required placeholder="Nome do cliente" />
           <Field label="Nº Processo / Referência" value={form.processo} onChange={v => setForm(f => ({ ...f, processo: v }))} placeholder="Opcional" />
-          <Field label="Valor (R$)" value={form.valor} onChange={v => setForm(f => ({ ...f, valor: v }))} type="number" step="0.01" required placeholder="0,00" />
-          <Field label="Data de Recebimento Prevista" value={form.dataVencimento} onChange={v => setForm(f => ({ ...f, dataVencimento: v }))} type="date" required />
+          <Field label="Valor total (R$)" value={form.valor} onChange={v => setForm(f => ({ ...f, valor: v }))} type="number" step="0.01" required placeholder="0,00" />
+          <Field label="Data inicial de recebimento" value={form.dataVencimento} onChange={v => setForm(f => ({ ...f, dataVencimento: v }))} type="date" required />
           <div>
             <label className="text-white/40 text-xs block mb-1">Status</label>
             <select
@@ -247,7 +254,43 @@ function RecebivelModal({
               <option value="recebido">Recebido</option>
             </select>
           </div>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.recorrente}
+                onChange={e => setForm(f => ({ ...f, recorrente: e.target.checked }))}
+                className="accent-gold"
+              />
+              <span className="text-white/50 text-sm">Parcelado / recorrente (mensal)</span>
+            </label>
+            {form.recorrente && isNew && (
+              <div className="ml-6 space-y-1">
+                <label className="text-white/40 text-xs block">Quantas vezes?</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={2}
+                    max={60}
+                    value={repeticoes}
+                    onChange={e => setRepeticoes(Math.max(2, Math.min(60, Number(e.target.value))))}
+                    className="w-20 bg-dark-300 border border-white/10 rounded-sm px-3 py-2 text-white text-sm focus:outline-none focus:border-gold/50"
+                  />
+                  <span className="text-white/30 text-xs">meses</span>
+                </div>
+                {form.dataVencimento && !isNaN(valorNum) && valorNum > 0 && (
+                  <div className="p-2 bg-gold/5 border border-gold/20 rounded-sm space-y-0.5">
+                    <p className="text-gold/70 text-xs">
+                      {fmt(valorPorMes)}/mês · de {fmtDate(form.dataVencimento)} até {fmtDate(addMonths(form.dataVencimento, repeticoes - 1))}
+                    </p>
+                    <p className="text-white/30 text-xs">Total: {fmt(valorNum)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <Field label="Observações" value={form.observacoes} onChange={v => setForm(f => ({ ...f, observacoes: v }))} placeholder="Opcional" />
+          {error && <p className="text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-sm px-3 py-2">{error}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-white/40 text-sm hover:text-white transition-colors">Cancelar</button>
             <button type="submit" className="px-5 py-2 bg-gold text-dark text-sm font-semibold rounded-sm hover:bg-gold-light transition-colors">Salvar</button>
@@ -261,11 +304,12 @@ function RecebivelModal({
 // ─── Pagamento Modal ──────────────────────────────────────────────────────────
 
 function PagamentoModal({
-  initial, onSave, onClose,
+  initial, onSave, onClose, error,
 }: {
   initial: Partial<Pagamento>
   onSave: (d: Partial<Pagamento>, repeticoes: number) => void
   onClose: () => void
+  error?: string
 }) {
   const [form, setForm] = useState({
     descricao: initial.descricao ?? '',
@@ -280,10 +324,11 @@ function PagamentoModal({
   const [repeticoes, setRepeticoes] = useState(2)
 
   const isNew = !initial.id
+  const valorNum = parseFloat(form.valor.replace(',', '.'))
+  const valorPorMes = !isNaN(valorNum) && repeticoes > 1 ? valorNum / repeticoes : valorNum
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    const valorNum = parseFloat(form.valor.replace(',', '.'))
     if (isNaN(valorNum) || valorNum <= 0) return
     onSave({ ...initial, ...form, valor: valorNum }, form.recorrente && isNew ? repeticoes : 1)
   }
@@ -309,7 +354,7 @@ function PagamentoModal({
               {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <Field label="Valor (R$)" value={form.valor} onChange={v => setForm(f => ({ ...f, valor: v }))} type="number" step="0.01" required placeholder="0,00" />
+          <Field label="Valor total (R$)" value={form.valor} onChange={v => setForm(f => ({ ...f, valor: v }))} type="number" step="0.01" required placeholder="0,00" />
           <Field label="Data de Vencimento" value={form.dataVencimento} onChange={v => setForm(f => ({ ...f, dataVencimento: v }))} type="date" required />
           <div>
             <label className="text-white/40 text-xs block mb-1">Status</label>
@@ -346,15 +391,19 @@ function PagamentoModal({
                   />
                   <span className="text-white/30 text-xs">meses</span>
                 </div>
-                {form.dataVencimento && (
-                  <p className="text-gold/50 text-xs">
-                    De {fmtDate(form.dataVencimento)} até {fmtDate(addMonths(form.dataVencimento, repeticoes - 1))}
-                  </p>
+                {form.dataVencimento && !isNaN(valorNum) && valorNum > 0 && (
+                  <div className="p-2 bg-gold/5 border border-gold/20 rounded-sm space-y-0.5">
+                    <p className="text-gold/70 text-xs">
+                      {fmt(valorPorMes)}/mês · de {fmtDate(form.dataVencimento)} até {fmtDate(addMonths(form.dataVencimento, repeticoes - 1))}
+                    </p>
+                    <p className="text-white/30 text-xs">Total: {fmt(valorNum)}</p>
+                  </div>
                 )}
               </div>
             )}
           </div>
           <Field label="Observações" value={form.observacoes} onChange={v => setForm(f => ({ ...f, observacoes: v }))} placeholder="Opcional" />
+          {error && <p className="text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-sm px-3 py-2">{error}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-white/40 text-sm hover:text-white transition-colors">Cancelar</button>
             <button type="submit" className="px-5 py-2 bg-gold text-dark text-sm font-semibold rounded-sm hover:bg-gold-light transition-colors">Salvar</button>
@@ -417,60 +466,106 @@ export default function Financeiro() {
 
   // ── CRUD: Recebiveis ──────────────────────────────────────────────────────
 
-  const saveRecebivel = async (data: Partial<Recebivel>) => {
-    if (data.id) {
-      const { id, ...rest } = data
-      await updateDoc(doc(db, 'recebiveis', id), rest as Record<string, unknown>)
-    } else {
-      await addDoc(collection(db, 'recebiveis'), { ...data, criadoEm: Date.now() })
+  const [saveError, setSaveError] = useState('')
+
+  const saveRecebivel = async (data: Partial<Recebivel>, repeticoes = 1) => {
+    setSaveError('')
+    try {
+      if (data.id) {
+        const { id, ...rest } = data
+        await updateDoc(doc(db, 'recebiveis', id), rest as Record<string, unknown>)
+      } else if (repeticoes > 1 && data.dataVencimento) {
+        const valorPorMes = (data.valor ?? 0) / repeticoes
+        const grupoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+        await Promise.all(
+          Array.from({ length: repeticoes }, (_, i) =>
+            addDoc(collection(db, 'recebiveis'), {
+              ...data,
+              valor: valorPorMes,
+              dataVencimento: addMonths(data.dataVencimento!, i),
+              grupoRecorrencia: grupoId,
+              criadoEm: Date.now() + i,
+            })
+          )
+        )
+      } else {
+        await addDoc(collection(db, 'recebiveis'), { ...data, criadoEm: Date.now() })
+      }
+      setEditRecebivel(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSaveError(`Erro ao salvar: ${msg}`)
     }
-    setEditRecebivel(null)
   }
 
   const deleteRecebivel = async (id: string) => {
     if (!confirm('Excluir este lançamento permanentemente?')) return
-    await deleteDoc(doc(db, 'recebiveis', id))
+    try {
+      await deleteDoc(doc(db, 'recebiveis', id))
+    } catch (e: unknown) {
+      alert(`Erro ao excluir: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   const toggleRecebivel = async (r: Recebivel) => {
-    await updateDoc(doc(db, 'recebiveis', r.id), {
-      status: r.status === 'pendente' ? 'recebido' : 'pendente',
-    })
+    try {
+      await updateDoc(doc(db, 'recebiveis', r.id), {
+        status: r.status === 'pendente' ? 'recebido' : 'pendente',
+      })
+    } catch (e: unknown) {
+      alert(`Erro: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   // ── CRUD: Pagamentos ──────────────────────────────────────────────────────
 
   const savePagamento = async (data: Partial<Pagamento>, repeticoes = 1) => {
-    if (data.id) {
-      const { id, ...rest } = data
-      await updateDoc(doc(db, 'pagamentos', id), rest as Record<string, unknown>)
-    } else if (repeticoes > 1 && data.dataVencimento) {
-      const grupoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-      await Promise.all(
-        Array.from({ length: repeticoes }, (_, i) =>
-          addDoc(collection(db, 'pagamentos'), {
-            ...data,
-            dataVencimento: addMonths(data.dataVencimento!, i),
-            grupoRecorrencia: grupoId,
-            criadoEm: Date.now() + i,
-          })
+    setSaveError('')
+    try {
+      if (data.id) {
+        const { id, ...rest } = data
+        await updateDoc(doc(db, 'pagamentos', id), rest as Record<string, unknown>)
+      } else if (repeticoes > 1 && data.dataVencimento) {
+        const valorPorMes = (data.valor ?? 0) / repeticoes
+        const grupoId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+        await Promise.all(
+          Array.from({ length: repeticoes }, (_, i) =>
+            addDoc(collection(db, 'pagamentos'), {
+              ...data,
+              valor: valorPorMes,
+              dataVencimento: addMonths(data.dataVencimento!, i),
+              grupoRecorrencia: grupoId,
+              criadoEm: Date.now() + i,
+            })
+          )
         )
-      )
-    } else {
-      await addDoc(collection(db, 'pagamentos'), { ...data, criadoEm: Date.now() })
+      } else {
+        await addDoc(collection(db, 'pagamentos'), { ...data, criadoEm: Date.now() })
+      }
+      setEditPagamento(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSaveError(`Erro ao salvar: ${msg}`)
     }
-    setEditPagamento(null)
   }
 
   const deletePagamento = async (id: string) => {
     if (!confirm('Excluir este lançamento permanentemente?')) return
-    await deleteDoc(doc(db, 'pagamentos', id))
+    try {
+      await deleteDoc(doc(db, 'pagamentos', id))
+    } catch (e: unknown) {
+      alert(`Erro ao excluir: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   const togglePagamento = async (p: Pagamento) => {
-    await updateDoc(doc(db, 'pagamentos', p.id), {
-      status: p.status === 'pendente' ? 'pago' : 'pendente',
-    })
+    try {
+      await updateDoc(doc(db, 'pagamentos', p.id), {
+        status: p.status === 'pendente' ? 'pago' : 'pendente',
+      })
+    } catch (e: unknown) {
+      alert(`Erro: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
 
   // ── Fatura ────────────────────────────────────────────────────────────────
@@ -1243,15 +1338,17 @@ export default function Financeiro() {
       {editRecebivel !== null && (
         <RecebivelModal
           initial={editRecebivel}
-          onSave={saveRecebivel}
-          onClose={() => setEditRecebivel(null)}
+          onSave={(d, rep) => saveRecebivel(d, rep)}
+          onClose={() => { setEditRecebivel(null); setSaveError('') }}
+          error={saveError}
         />
       )}
       {editPagamento !== null && (
         <PagamentoModal
           initial={editPagamento}
           onSave={savePagamento}
-          onClose={() => setEditPagamento(null)}
+          onClose={() => { setEditPagamento(null); setSaveError('') }}
+          error={saveError}
         />
       )}
     </div>
