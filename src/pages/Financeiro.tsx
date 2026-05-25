@@ -871,6 +871,72 @@ export default function Financeiro() {
               </div>
             )}
 
+            {/* Lançamentos do mês atual */}
+            {(() => {
+              const recMes = recebiveis.filter(r => isThisMonth(r.dataVencimento))
+              const pagMes = pagamentos.filter(p => isThisMonth(p.dataVencimento))
+              if (recMes.length === 0 && pagMes.length === 0) return null
+              return (
+                <div>
+                  <h3 className="font-serif text-white text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Calendar size={16} className="text-gold" />
+                    Lançamentos de {monthLabel}
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                    {recMes.map(r => (
+                      <div key={r.id} className={`flex items-center gap-3 px-4 py-3 rounded-sm border transition-all ${
+                        r.status === 'recebido' ? 'border-white/5 bg-dark-100' : 'border-green-400/15 bg-dark-100'
+                      }`}>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                          r.status === 'recebido' ? 'bg-green-500 border-green-500' : 'border-green-400/40'
+                        }`}>
+                          {r.status === 'recebido' && <Check size={8} className="text-white" />}
+                        </div>
+                        <p className={`text-sm flex-1 truncate ${r.status === 'recebido' ? 'line-through text-white/30' : 'text-white/80'}`}>
+                          {r.clienteName}
+                        </p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium flex-shrink-0 ${
+                          r.status === 'recebido'
+                            ? 'bg-green-500/10 text-green-400/60'
+                            : 'bg-green-400/10 text-green-400'
+                        }`}>
+                          {r.status === 'recebido' ? 'Recebido' : 'A Receber'}
+                        </span>
+                        <span className={`text-sm font-semibold flex-shrink-0 ${r.status === 'recebido' ? 'text-white/25' : 'text-green-400'}`}>
+                          {fmt(r.valor)}
+                        </span>
+                      </div>
+                    ))}
+                    {pagMes.map(p => (
+                      <div key={p.id} className={`flex items-center gap-3 px-4 py-3 rounded-sm border transition-all ${
+                        p.status === 'pago' ? 'border-white/5 bg-dark-100' : 'border-red-400/15 bg-dark-100'
+                      }`}>
+                        <div className={`w-4 h-4 rounded-sm border-2 flex items-center justify-center flex-shrink-0 ${
+                          p.status === 'pago' ? 'bg-gold border-gold' : 'border-red-400/40'
+                        }`}>
+                          {p.status === 'pago' && <Check size={8} className="text-dark" />}
+                        </div>
+                        <p className={`text-sm flex-1 truncate ${p.status === 'pago' ? 'line-through text-white/30' : 'text-white/80'}`}>
+                          {p.descricao}
+                        </p>
+                        <span className="text-white/20 text-[10px] flex-shrink-0">{p.categoria}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium flex-shrink-0 ${
+                          p.status === 'pago'
+                            ? 'bg-gold/10 text-gold/50'
+                            : 'bg-red-400/10 text-red-400'
+                        }`}>
+                          {p.status === 'pago' ? 'Pago' : 'A Pagar'}
+                        </span>
+                        <span className={`text-sm font-semibold flex-shrink-0 ${p.status === 'pago' ? 'text-white/25' : 'text-red-400'}`}>
+                          {fmt(p.valor)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Fluxo de Caixa mensal */}
             {fluxoMensal.length > 0 && (
               <div>
