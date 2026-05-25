@@ -646,26 +646,41 @@ export default function Financeiro() {
 
   const selectedFaturaTotal = faturaItems.filter(i => i.selecionado).reduce((s, i) => s + i.valor, 0)
 
-  // Fluxo de caixa por mês (todos os períodos com lançamentos pendentes)
+  // Fluxo de caixa — todos os meses, todos os status
   const fluxoMensal = (() => {
-    const map: Record<string, { receber: number; pagar: number }> = {}
-    for (const r of recebiveis.filter(r => r.status === 'pendente' && r.dataVencimento)) {
+    const map: Record<string, {
+      receber: number; receberPago: number
+      pagar: number; pagarPago: number
+    }> = {}
+
+    for (const r of recebiveis.filter(r => r.dataVencimento)) {
       const key = r.dataVencimento.slice(0, 7)
-      if (!map[key]) map[key] = { receber: 0, pagar: 0 }
+      if (!map[key]) map[key] = { receber: 0, receberPago: 0, pagar: 0, pagarPago: 0 }
       map[key].receber += r.valor
+      if (r.status === 'recebido') map[key].receberPago += r.valor
     }
-    for (const p of pagamentos.filter(p => p.status === 'pendente' && p.dataVencimento)) {
+    for (const p of pagamentos.filter(p => p.dataVencimento)) {
       const key = p.dataVencimento.slice(0, 7)
-      if (!map[key]) map[key] = { receber: 0, pagar: 0 }
+      if (!map[key]) map[key] = { receber: 0, receberPago: 0, pagar: 0, pagarPago: 0 }
       map[key].pagar += p.valor
+      if (p.status === 'pago') map[key].pagarPago += p.valor
     }
+
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, vals]) => {
         const [y, m] = key.split('-').map(Number)
         const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
         const isCurrent = y === currentYear && m === currentMonth + 1
-        return { key, label, isCurrent, ...vals, saldo: vals.receber - vals.pagar }
+        const isPast = key < `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`
+        return {
+          key, label, isCurrent, isPast,
+          receber: vals.receber, receberPago: vals.receberPago,
+          receberPendente: vals.receber - vals.receberPago,
+          pagar: vals.pagar, pagarPago: vals.pagarPago,
+          pagarPendente: vals.pagar - vals.pagarPago,
+          saldo: vals.receber - vals.pagar,
+        }
       })
   })()
 
@@ -957,31 +972,56 @@ export default function Financeiro() {
                   {fluxoMensal.map(mes => (
                     <div
                       key={mes.key}
-                      className={`grid grid-cols-4 gap-2 items-center px-4 py-3 rounded-sm border transition-all ${
+                      className={`grid grid-cols-4 gap-2 items-start px-4 py-3 rounded-sm border transition-all ${
                         mes.isCurrent
                           ? 'border-gold/30 bg-gold/5'
+                          : mes.isPast
+                          ? 'border-white/4 bg-dark-100 opacity-70'
                           : 'border-white/6 bg-dark-100'
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {mes.isCurrent && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" />
-                        )}
-                        <span className={`text-sm capitalize truncate ${mes.isCurrent ? 'text-gold font-medium' : 'text-white/60'}`}>
+                      {/* Mês */}
+                      <div className="flex items-center gap-2 min-w-0 pt-0.5">
+                        {mes.isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" />}
+                        <span className={`text-sm capitalize truncate ${mes.isCurrent ? 'text-gold font-medium' : mes.isPast ? 'text-white/40' : 'text-white/60'}`}>
                           {mes.label}
                         </span>
                       </div>
-                      <span className={`text-sm text-right font-medium ${mes.receber > 0 ? 'text-green-400' : 'text-white/20'}`}>
-                        {mes.receber > 0 ? fmt(mes.receber) : '—'}
-                      </span>
-                      <span className={`text-sm text-right font-medium ${mes.pagar > 0 ? 'text-red-400' : 'text-white/20'}`}>
-                        {mes.pagar > 0 ? fmt(mes.pagar) : '—'}
-                      </span>
-                      <span className={`text-sm text-right font-semibold ${
-                        mes.saldo > 0 ? 'text-green-400' : mes.saldo < 0 ? 'text-red-400' : 'text-white/30'
-                      }`}>
-                        {mes.saldo > 0 ? '+' : ''}{fmt(mes.saldo)}
-                      </span>
+
+                      {/* A Receber */}
+                      <div className="text-right">
+                        <p className={`text-sm font-medium ${mes.receber > 0 ? 'text-green-400' : 'text-white/20'}`}>
+                          {mes.receber > 0 ? fmt(mes.receber) : '—'}
+                        </p>
+                        {mes.receberPago > 0 && mes.receberPago < mes.receber && (
+                          <p className="text-green-400/40 text-[10px]">{fmt(mes.receberPago)} recebido</p>
+                        )}
+                        {mes.receberPago > 0 && mes.receberPago === mes.receber && (
+                          <p className="text-green-400/50 text-[10px]">✓ tudo recebido</p>
+                        )}
+                      </div>
+
+                      {/* A Pagar */}
+                      <div className="text-right">
+                        <p className={`text-sm font-medium ${mes.pagar > 0 ? 'text-red-400' : 'text-white/20'}`}>
+                          {mes.pagar > 0 ? fmt(mes.pagar) : '—'}
+                        </p>
+                        {mes.pagarPago > 0 && mes.pagarPago < mes.pagar && (
+                          <p className="text-gold/50 text-[10px]">{fmt(mes.pagarPago)} pago</p>
+                        )}
+                        {mes.pagarPago > 0 && mes.pagarPago === mes.pagar && (
+                          <p className="text-gold/60 text-[10px]">✓ tudo pago</p>
+                        )}
+                      </div>
+
+                      {/* Saldo */}
+                      <div className="text-right">
+                        <p className={`text-sm font-semibold ${
+                          mes.saldo > 0 ? 'text-green-400' : mes.saldo < 0 ? 'text-red-400' : 'text-white/30'
+                        }`}>
+                          {mes.saldo > 0 ? '+' : ''}{fmt(mes.saldo)}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
