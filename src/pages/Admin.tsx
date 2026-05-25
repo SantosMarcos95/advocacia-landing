@@ -9,7 +9,7 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore'
-import { auth, db, googleProvider, microsoftProvider, ADMIN_EMAIL } from '../lib/firebase'
+import { auth, db, googleProvider, microsoftProvider, ADMIN_EMAILS } from '../lib/firebase'
 import type { User } from 'firebase/auth'
 
 interface Testimonial {
@@ -50,7 +50,7 @@ export default function Admin() {
   }, [])
 
   useEffect(() => {
-    if (!user || user.email !== ADMIN_EMAIL) return
+    if (!user || !ADMIN_EMAILS.includes(user.email ?? '')) return
     const q = query(collection(db, 'testimonials'), orderBy('createdAt', 'desc'))
     const unsub = onSnapshot(q, snap => {
       setTestimonials(
@@ -140,7 +140,7 @@ export default function Admin() {
     )
   }
 
-  if (user.email !== ADMIN_EMAIL) {
+  if (!ADMIN_EMAILS.includes(user.email ?? '')) {
     return (
       <div className="min-h-screen bg-dark flex items-center justify-center p-6">
         <div className="glass border border-red-500/20 rounded-sm p-10 w-full max-w-sm text-center">
@@ -175,7 +175,21 @@ export default function Admin() {
               <p className="text-gold text-[10px] tracking-widest uppercase font-light">Depoimentos</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <a
+              href="/financeiro"
+              className="flex items-center gap-2 px-3 py-1.5 border border-white/10 text-white/50 hover:border-gold hover:text-gold text-xs font-medium rounded-sm transition-all duration-200"
+            >
+              <DollarSignIcon />
+              Financeiro
+            </a>
+            <a
+              href="/farm3d"
+              className="flex items-center gap-2 px-3 py-1.5 border border-white/10 text-white/50 hover:border-gold hover:text-gold text-xs font-medium rounded-sm transition-all duration-200"
+            >
+              <CubeIcon />
+              Farm3D
+            </a>
             {user.photoURL && (
               <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full opacity-70" />
             )}
@@ -302,6 +316,25 @@ export default function Admin() {
         )}
       </div>
     </div>
+  )
+}
+
+function DollarSignIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+    </svg>
+  )
+}
+
+function CubeIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </svg>
   )
 }
 

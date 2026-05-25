@@ -17,4 +17,5 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const googleProvider = new GoogleAuthProvider()
 export const microsoftProvider = new OAuthProvider('microsoft.com')
-export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL as string
+const rawEmails = (import.meta.env.VITE_ADMIN_EMAIL as string) ?? ''
+export const ADMIN_EMAILS: string[] = rawEmails.split(',').map(e => e.trim()).filter(Boolean)

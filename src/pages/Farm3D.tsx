@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore'
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import type { User } from 'firebase/auth'
-import { db, auth, googleProvider, ADMIN_EMAIL } from '../lib/firebase'
+import { db, auth, googleProvider, ADMIN_EMAILS } from '../lib/firebase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -588,7 +588,7 @@ export default function Farm3D() {
     )
   }
 
-  if (user.email !== ADMIN_EMAIL) {
+  if (!ADMIN_EMAILS.includes(user.email ?? '')) {
     return (
       <div className="min-h-screen bg-dark flex flex-col items-center justify-center gap-4">
         <p className="text-red-400">Acesso não autorizado.</p>
