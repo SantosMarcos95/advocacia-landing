@@ -67,13 +67,22 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* CTA Button */}
-        <button
-          onClick={() => handleLink('#contato')}
-          className="hidden md:flex items-center gap-2 px-5 py-2.5 border border-gold text-gold text-sm font-medium tracking-wide hover:bg-gold hover:text-dark transition-all duration-300 rounded-sm"
-        >
-          Agendar Consulta
-        </button>
+        {/* Desktop actions */}
+        <div className="hidden md:flex items-center gap-3">
+          <a
+            href="/admin"
+            className="text-sm font-light text-white/40 hover:text-gold transition-colors duration-300 tracking-wide relative group"
+          >
+            Intranet
+            <span className="absolute -bottom-1 left-0 w-0 h-px bg-gold group-hover:w-full transition-all duration-300" />
+          </a>
+          <button
+            onClick={() => handleLink('#contato')}
+            className="flex items-center gap-2 px-5 py-2.5 border border-gold text-gold text-sm font-medium tracking-wide hover:bg-gold hover:text-dark transition-all duration-300 rounded-sm"
+          >
+            Agendar Consulta
+          </button>
+        </div>
 
         {/* Mobile menu button */}
         <button
@@ -100,6 +109,12 @@ export default function Navbar() {
               {link.label}
             </button>
           ))}
+          <a
+            href="/admin"
+            className="text-left text-white/40 hover:text-gold transition-colors font-light tracking-wide py-1 text-sm"
+          >
+            Intranet
+          </a>
           <button
             onClick={() => handleLink('#contato')}
             className="mt-2 w-full py-3 border border-gold text-gold text-sm font-medium tracking-wide hover:bg-gold hover:text-dark transition-all duration-300"
