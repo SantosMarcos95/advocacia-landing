@@ -911,15 +911,16 @@ export default function Financeiro() {
                           {r.clienteName}
                         </p>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium flex-shrink-0 ${
-                          r.status === 'recebido'
-                            ? 'bg-green-500/10 text-green-400/60'
-                            : 'bg-green-400/10 text-green-400'
+                          r.status === 'recebido' ? 'bg-green-500/10 text-green-400/60' : 'bg-green-400/10 text-green-400'
                         }`}>
                           {r.status === 'recebido' ? 'Recebido' : 'A Receber'}
                         </span>
                         <span className={`text-sm font-semibold flex-shrink-0 ${r.status === 'recebido' ? 'text-white/25' : 'text-green-400'}`}>
                           {fmt(r.valor)}
                         </span>
+                        <button onClick={() => deleteRecebivel(r.id)} className="p-1 text-white/15 hover:text-red-400 transition-colors flex-shrink-0">
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     ))}
                     {pagMes.map(p => (
@@ -936,15 +937,16 @@ export default function Financeiro() {
                         </p>
                         <span className="text-white/20 text-[10px] flex-shrink-0">{p.categoria}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium flex-shrink-0 ${
-                          p.status === 'pago'
-                            ? 'bg-gold/10 text-gold/50'
-                            : 'bg-red-400/10 text-red-400'
+                          p.status === 'pago' ? 'bg-gold/10 text-gold/50' : 'bg-red-400/10 text-red-400'
                         }`}>
                           {p.status === 'pago' ? 'Pago' : 'A Pagar'}
                         </span>
                         <span className={`text-sm font-semibold flex-shrink-0 ${p.status === 'pago' ? 'text-white/25' : 'text-red-400'}`}>
                           {fmt(p.valor)}
                         </span>
+                        <button onClick={() => deletePagamento(p.id)} className="p-1 text-white/15 hover:text-red-400 transition-colors flex-shrink-0">
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     ))}
                   </div>
