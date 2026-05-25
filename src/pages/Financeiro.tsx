@@ -438,6 +438,15 @@ export default function Financeiro() {
   const [filterPagar, setFilterPagar] = useState<'todos' | 'pendente' | 'pago'>('pendente')
   const [filterReceber, setFilterReceber] = useState<'todos' | 'pendente' | 'recebido'>('pendente')
 
+  // Fluxo de caixa — meses expandidos
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
+  const toggleMonth = (key: string) =>
+    setExpandedMonths(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => {
       setUser(u)
@@ -971,61 +980,122 @@ export default function Financeiro() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  {fluxoMensal.map(mes => (
-                    <div
-                      key={mes.key}
-                      className={`grid grid-cols-4 gap-2 items-start px-4 py-3 rounded-sm border transition-all ${
-                        mes.isCurrent
-                          ? 'border-gold/30 bg-gold/5'
-                          : mes.isPast
-                          ? 'border-white/4 bg-dark-100 opacity-70'
-                          : 'border-white/6 bg-dark-100'
-                      }`}
-                    >
-                      {/* Mês */}
-                      <div className="flex items-center gap-2 min-w-0 pt-0.5">
-                        {mes.isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" />}
-                        <span className={`text-sm capitalize truncate ${mes.isCurrent ? 'text-gold font-medium' : mes.isPast ? 'text-white/40' : 'text-white/60'}`}>
-                          {mes.label}
-                        </span>
-                      </div>
+                  {fluxoMensal.map(mes => {
+                    const isExpanded = expandedMonths.has(mes.key)
+                    const itensR = recebiveis.filter(r => r.dataVencimento.startsWith(mes.key))
+                    const itensP = pagamentos.filter(p => p.dataVencimento.startsWith(mes.key))
 
-                      {/* A Receber */}
-                      <div className="text-right">
-                        <p className={`text-sm font-medium ${mes.receber > 0 ? 'text-green-400' : 'text-white/20'}`}>
-                          {mes.receber > 0 ? fmt(mes.receber) : '—'}
-                        </p>
-                        {mes.receberPago > 0 && mes.receberPago < mes.receber && (
-                          <p className="text-green-400/40 text-[10px]">{fmt(mes.receberPago)} recebido</p>
-                        )}
-                        {mes.receberPago > 0 && mes.receberPago === mes.receber && (
-                          <p className="text-green-400/50 text-[10px]">✓ tudo recebido</p>
-                        )}
-                      </div>
+                    return (
+                      <div key={mes.key} className={`rounded-sm border overflow-hidden transition-all ${
+                        mes.isCurrent ? 'border-gold/30' : mes.isPast ? 'border-white/4 opacity-70' : 'border-white/6'
+                      }`}>
+                        {/* Linha do mês — clicável */}
+                        <button
+                          onClick={() => toggleMonth(mes.key)}
+                          className={`w-full grid grid-cols-4 gap-2 items-start px-4 py-3 text-left transition-colors ${
+                            mes.isCurrent ? 'bg-gold/5 hover:bg-gold/8' : 'bg-dark-100 hover:bg-dark-200'
+                          }`}
+                        >
+                          {/* Mês */}
+                          <div className="flex items-center gap-2 min-w-0 pt-0.5">
+                            {mes.isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-gold flex-shrink-0" />}
+                            <span className={`text-sm capitalize truncate ${mes.isCurrent ? 'text-gold font-medium' : mes.isPast ? 'text-white/40' : 'text-white/60'}`}>
+                              {mes.label}
+                            </span>
+                            <ChevronDown size={12} className={`text-white/20 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </div>
 
-                      {/* A Pagar */}
-                      <div className="text-right">
-                        <p className={`text-sm font-medium ${mes.pagar > 0 ? 'text-red-400' : 'text-white/20'}`}>
-                          {mes.pagar > 0 ? fmt(mes.pagar) : '—'}
-                        </p>
-                        {mes.pagarPago > 0 && mes.pagarPago < mes.pagar && (
-                          <p className="text-gold/50 text-[10px]">{fmt(mes.pagarPago)} pago</p>
-                        )}
-                        {mes.pagarPago > 0 && mes.pagarPago === mes.pagar && (
-                          <p className="text-gold/60 text-[10px]">✓ tudo pago</p>
-                        )}
-                      </div>
+                          {/* A Receber */}
+                          <div className="text-right">
+                            <p className={`text-sm font-medium ${mes.receber > 0 ? 'text-green-400' : 'text-white/20'}`}>
+                              {mes.receber > 0 ? fmt(mes.receber) : '—'}
+                            </p>
+                            {mes.receberPago > 0 && mes.receberPago < mes.receber && (
+                              <p className="text-green-400/40 text-[10px]">{fmt(mes.receberPago)} recebido</p>
+                            )}
+                            {mes.receberPago > 0 && mes.receberPago === mes.receber && (
+                              <p className="text-green-400/50 text-[10px]">✓ tudo recebido</p>
+                            )}
+                          </div>
 
-                      {/* Saldo */}
-                      <div className="text-right">
-                        <p className={`text-sm font-semibold ${
-                          mes.saldo > 0 ? 'text-green-400' : mes.saldo < 0 ? 'text-red-400' : 'text-white/30'
-                        }`}>
-                          {mes.saldo > 0 ? '+' : ''}{fmt(mes.saldo)}
-                        </p>
+                          {/* A Pagar */}
+                          <div className="text-right">
+                            <p className={`text-sm font-medium ${mes.pagar > 0 ? 'text-red-400' : 'text-white/20'}`}>
+                              {mes.pagar > 0 ? fmt(mes.pagar) : '—'}
+                            </p>
+                            {mes.pagarPago > 0 && mes.pagarPago < mes.pagar && (
+                              <p className="text-gold/50 text-[10px]">{fmt(mes.pagarPago)} pago</p>
+                            )}
+                            {mes.pagarPago > 0 && mes.pagarPago === mes.pagar && (
+                              <p className="text-gold/60 text-[10px]">✓ tudo pago</p>
+                            )}
+                          </div>
+
+                          {/* Saldo */}
+                          <div className="text-right">
+                            <p className={`text-sm font-semibold ${
+                              mes.saldo > 0 ? 'text-green-400' : mes.saldo < 0 ? 'text-red-400' : 'text-white/30'
+                            }`}>
+                              {mes.saldo > 0 ? '+' : ''}{fmt(mes.saldo)}
+                            </p>
+                          </div>
+                        </button>
+
+                        {/* Itens expandidos */}
+                        {isExpanded && (
+                          <div className="border-t border-white/6 bg-dark-200 flex flex-col divide-y divide-white/4">
+                            {itensR.map(r => (
+                              <div key={r.id} className="flex items-center gap-3 px-5 py-2.5">
+                                <div className={`w-3 h-3 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                                  r.status === 'recebido' ? 'bg-green-500 border-green-500' : 'border-green-400/40'
+                                }`}>
+                                  {r.status === 'recebido' && <Check size={6} className="text-white" />}
+                                </div>
+                                <p className={`text-xs flex-1 truncate ${r.status === 'recebido' ? 'line-through text-white/25' : 'text-white/70'}`}>
+                                  {r.clienteName}
+                                </p>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm flex-shrink-0 ${
+                                  r.status === 'recebido' ? 'bg-green-500/10 text-green-400/50' : 'bg-green-400/10 text-green-400'
+                                }`}>
+                                  {r.status === 'recebido' ? 'Recebido' : 'A Receber'}
+                                </span>
+                                <span className={`text-xs font-medium flex-shrink-0 ${r.status === 'recebido' ? 'text-white/25' : 'text-green-400'}`}>
+                                  {fmt(r.valor)}
+                                </span>
+                                <button onClick={() => deleteRecebivel(r.id)} className="p-1 text-white/15 hover:text-red-400 transition-colors flex-shrink-0">
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                            {itensP.map(p => (
+                              <div key={p.id} className="flex items-center gap-3 px-5 py-2.5">
+                                <div className={`w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 ${
+                                  p.status === 'pago' ? 'bg-gold border-gold' : 'border-red-400/40'
+                                }`}>
+                                  {p.status === 'pago' && <Check size={6} className="text-dark" />}
+                                </div>
+                                <p className={`text-xs flex-1 truncate ${p.status === 'pago' ? 'line-through text-white/25' : 'text-white/70'}`}>
+                                  {p.descricao}
+                                </p>
+                                <span className="text-white/20 text-[10px] flex-shrink-0">{p.categoria}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm flex-shrink-0 ${
+                                  p.status === 'pago' ? 'bg-gold/10 text-gold/50' : 'bg-red-400/10 text-red-400'
+                                }`}>
+                                  {p.status === 'pago' ? 'Pago' : 'A Pagar'}
+                                </span>
+                                <span className={`text-xs font-medium flex-shrink-0 ${p.status === 'pago' ? 'text-white/25' : 'text-red-400'}`}>
+                                  {fmt(p.valor)}
+                                </span>
+                                <button onClick={() => deletePagamento(p.id)} className="p-1 text-white/15 hover:text-red-400 transition-colors flex-shrink-0">
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {/* Totais gerais */}
